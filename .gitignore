@@ -1,0 +1,12 @@
+node_modules/
+dist/
+build/
+.env
+*.o
+*.ll
+*.bc
+*.exe
+.DS_Store
+coverage/
+*.tsbuildinfo
+graphify-out/

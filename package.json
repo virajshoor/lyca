@@ -1,0 +1,19 @@
+{
+  "name": "ferra-lang",
+  "version": "0.1.0",
+  "description": "A Python-like, statically typed language that compiles to native code via LLVM",
+  "license": "MIT",
+  "bin": {
+    "ferra": "./dist/cli/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "ferra": "node dist/cli/index.js"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
