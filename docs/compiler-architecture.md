@@ -2,10 +2,10 @@
 
 **Author:** Viraj Shoor
 
-The Ferra compiler is a TypeScript program (`src/`) that runs on Node.js. It does not load a native LLVM library. It writes LLVM IR as text and runs `clang` on that text.
+The Lyca compiler is a TypeScript program (`src/`) that runs on Node.js. It does not load a native LLVM library. It writes LLVM IR as text and runs `clang` on that text.
 
 ```
-.fe source
+.lyca source
     │
     ▼
  lexer      src/lexer
@@ -23,7 +23,7 @@ The Ferra compiler is a TypeScript program (`src/`) that runs on Node.js. It doe
  clang file.ll -o binary
 ```
 
-`src/compile.ts` is the driver. `src/cli/index.ts` is the `ferra` command (`node:util` `parseArgs`, no extra CLI package).
+`src/compile.ts` is the driver. `src/cli/index.ts` is the `lyca` command (`node:util` `parseArgs`, no extra CLI package).
 
 ## Why not llvm-bindings
 
@@ -38,7 +38,7 @@ The Ferra compiler is a TypeScript program (`src/`) that runs on Node.js. It doe
 | `src/ast` | Discriminated unions for types, expressions, statements, decls. |
 | `src/typechecker` | Resolves types, enforces annotations, tracks move/borrow state per local. |
 | `src/codegen` | Walks the checked AST and concatenates LLVM IR. Locals are `alloca` + load/store (no SSA construction). |
-| `src/cli` | `ferra build <file> -o <out>`. |
+| `src/cli` | `lyca build <file> -o <out>`. |
 | `src/diagnostics.ts` | `CompileError` with `code`, span, source snippet, optional hint. |
 | `tests/` | Vitest: lexer, parser, typechecker, plus e2e (`clang` + run). |
 
@@ -46,9 +46,9 @@ The Ferra compiler is a TypeScript program (`src/`) that runs on Node.js. It doe
 
 `lex(source, filename): Token[]`
 
-- Tracks an indent stack. A deeper indent emits `indent`; a shallower one emits one `dedent` per matched level. A depth that does not match a previous level is `FER004`.
+- Tracks an indent stack. A deeper indent emits `indent`; a shallower one emits one `dedent` per matched level. A depth that does not match a previous level is `LYC004`.
 - Blank lines and `#` comment-only lines do not change indent.
-- Tabs are `FER003`.
+- Tabs are `LYC003`.
 - `1..10` is `int`, `..`, `int` — the second `.` prevents float lexing.
 - EOF inserts remaining `dedent`s and one `eof` token.
 
@@ -71,7 +71,7 @@ for       ::= "for" ident "in" expr ".." expr block
 
 Expression precedence, tightest last: `or`, `and`, `not`, comparisons (one operator, not chained), `+ -`, `* / %`, unary `-` and `&`, postfix call/index/field.
 
-On failure it throws `CompileError` (`FER101`, `FER102`, `FER104`, `FER105`).
+On failure it throws `CompileError` (`LYC101`, `LYC102`, `LYC104`, `LYC105`).
 
 ## Type checker
 
@@ -89,7 +89,7 @@ There is no separate typed AST. Codegen re-resolves types from annotations and f
 
 ## Codegen
 
-Each Ferra function becomes an LLVM `define`. Parameters are stored into allocas so the rest of the function is load/store.
+Each Lyca function becomes an LLVM `define`. Parameters are stored into allocas so the rest of the function is load/store.
 
 - `i32`/`i64`/`f32`/`f64`/`bool` → `i32`/`i64`/`float`/`double`/`i1`
 - `string` and `&string` → `%String = { ptr, i64 }`
@@ -108,7 +108,7 @@ After IR is written to `output.ll`, `compileFile` runs:
 clang output.ll -o output -Wno-override-module
 ```
 
-`FER301` is a clang failure or an internal codegen bug.
+`LYC301` is a clang failure or an internal codegen bug.
 
 ## Adding a language feature
 
@@ -126,4 +126,4 @@ clang output.ll -o output -Wno-override-module
 npm test
 ```
 
-Vitest runs `tests/*.test.ts`. E2E compiles `examples/fib.fe` and `examples/hello.fe` with the real clang pipeline and checks exit code `55` and stdout `Hello, World!`.
+Vitest runs `tests/*.test.ts`. E2E compiles `examples/fib.lyca` and `examples/hello.lyca` with the real clang pipeline and checks exit code `55` and stdout `Hello, World!`.

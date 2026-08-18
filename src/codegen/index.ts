@@ -1,6 +1,6 @@
 import { Expr, FnDecl, Stmt, TypeAst } from "../ast";
 import { CompileError } from "../diagnostics";
-import { CheckedProgram, FerraType } from "../typechecker";
+import { CheckedProgram, LycaType } from "../typechecker";
 
 export function codegen(checked: CheckedProgram, filename: string): string {
   return new Emitter(checked, filename).emit();
@@ -167,14 +167,14 @@ class Emitter {
     }
   }
 
-  private emitExpr(expr: Expr, expected: FerraType | null): { ref: string; ir: string; ty: FerraType } {
+  private emitExpr(expr: Expr, expected: LycaType | null): { ref: string; ir: string; ty: LycaType } {
     switch (expr.kind) {
       case "int": {
-        const ty: FerraType = expected?.kind === "i64" ? { kind: "i64" } : { kind: "i32" };
+        const ty: LycaType = expected?.kind === "i64" ? { kind: "i64" } : { kind: "i32" };
         return { ref: expr.raw, ir: this.irType(ty), ty };
       }
       case "float": {
-        const ty: FerraType = expected?.kind === "f32" ? { kind: "f32" } : { kind: "f64" };
+        const ty: LycaType = expected?.kind === "f32" ? { kind: "f32" } : { kind: "f64" };
         return { ref: Number(expr.raw).toExponential(16), ir: this.irType(ty), ty };
       }
       case "bool":
@@ -271,7 +271,7 @@ class Emitter {
       }
       case "array": {
         const n = expected?.kind === "array" ? expected.size : expr.elements.length;
-        const elemTy: FerraType = expected?.kind === "array" ? expected.element : { kind: "i32" };
+        const elemTy: LycaType = expected?.kind === "array" ? expected.element : { kind: "i32" };
         const ir = `[${n} x ${this.irType(elemTy)}]`;
         const ptr = this.alloca(ir);
         expr.elements.forEach((el, i) => {
@@ -287,7 +287,7 @@ class Emitter {
     }
   }
 
-  private emitBinary(expr: Extract<Expr, { kind: "binary" }>, expected: FerraType | null) {
+  private emitBinary(expr: Extract<Expr, { kind: "binary" }>, expected: LycaType | null) {
     const op = expr.op;
     if (op === "and" || op === "or") {
       const res = this.alloca("i1");
@@ -304,7 +304,7 @@ class Emitter {
       this.place(done);
       const v = this.t();
       this.body.push(`  ${v} = load i1, ptr ${res}`);
-      return { ref: v, ir: "i1", ty: { kind: "bool" } as FerraType };
+      return { ref: v, ir: "i1", ty: { kind: "bool" } as LycaType };
     }
     const hint = expected && isArith(expected) ? expected : null;
     const l = this.emitExpr(expr.left, hint);
@@ -321,7 +321,7 @@ class Emitter {
       const v = this.t();
       const fp = l.ir === "float" || l.ir === "double";
       this.body.push(`  ${v} = ${fp ? "fcmp" : "icmp"} ${fp ? cmp[op]![1] : cmp[op]![0]} ${l.ir} ${l.ref}, ${r.ref}`);
-      return { ref: v, ir: "i1", ty: { kind: "bool" } as FerraType };
+      return { ref: v, ir: "i1", ty: { kind: "bool" } as LycaType };
     }
     const fp = l.ir === "float" || l.ir === "double";
     const map: Record<string, [string, string]> = {
@@ -367,7 +367,7 @@ class Emitter {
     return v;
   }
 
-  private tryLvalue(expr: Expr): { ptr: string; ir: string; ty: FerraType } | null {
+  private tryLvalue(expr: Expr): { ptr: string; ir: string; ty: LycaType } | null {
     if (expr.kind === "name") {
       const loc = this.locals.get(expr.name);
       if (!loc) return null;
@@ -399,7 +399,7 @@ class Emitter {
     return loc;
   }
 
-  private irType(t: FerraType): string {
+  private irType(t: LycaType): string {
     switch (t.kind) {
       case "i32":
         return "i32";
@@ -422,7 +422,7 @@ class Emitter {
     }
   }
 
-  private zero(t: FerraType): string {
+  private zero(t: LycaType): string {
     if (t.kind === "f32" || t.kind === "f64") return "0.000000e+00";
     if (t.kind === "bool") return "false";
     if (t.kind === "string") return "zeroinitializer";
@@ -455,7 +455,7 @@ class Emitter {
 
   private ice(msg: string): never {
     throw new CompileError(
-      "FER301",
+      "LYC301",
       `internal compiler error: ${msg}`,
       { line: 1, col: 1, endLine: 1, endCol: 1 },
       this.filename,
@@ -465,7 +465,7 @@ class Emitter {
   }
 }
 
-function isArith(t: FerraType): boolean {
+function isArith(t: LycaType): boolean {
   return t.kind === "i32" || t.kind === "i64" || t.kind === "f32" || t.kind === "f64";
 }
 
@@ -474,7 +474,7 @@ function elemIrOf(arr: string): string {
   return m ? m[2]! : "i32";
 }
 
-function irToType(ir: string): FerraType {
+function irToType(ir: string): LycaType {
   if (ir === "i32") return { kind: "i32" };
   if (ir === "i64") return { kind: "i64" };
   if (ir === "float") return { kind: "f32" };
@@ -487,7 +487,7 @@ function irToType(ir: string): FerraType {
   return { kind: "i32" };
 }
 
-function astType(t: TypeAst): FerraType {
+function astType(t: TypeAst): LycaType {
   if (t.kind === "named") {
     if (["i32", "i64", "f32", "f64", "bool", "string"].includes(t.name)) return { kind: t.name as "i32" };
     return { kind: "struct", name: t.name };
