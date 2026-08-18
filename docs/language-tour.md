@@ -1,5 +1,7 @@
 # Language tour
 
+**Author:** Viraj Shoor
+
 Ferra source files use the `.fe` extension. A program is a sequence of `struct` and `def` items. Execution starts at `main`.
 
 ## Layout

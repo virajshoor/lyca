@@ -2,6 +2,8 @@
 
 **Python-like syntax. LLVM-native binaries. Types you can trust.**
 
+Created by **Viraj Shoor**.
+
 [![Build](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/virajshoor/ferra-lang)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-TypeScript-3178C6)](https://www.typescriptlang.org/)
@@ -142,9 +144,10 @@ tests/
 - [Type system](docs/type-system.md) — ownership, what is allowed and why
 - [Compiler architecture](docs/compiler-architecture.md) — internals for contributors
 - [Error reference](docs/error-reference.md) — every `FERnnn` code
+- [Coding in Ferra (PDF)](docs/book/coding-in-ferra.pdf) — book-length tutorial by Viraj Shoor
 
 ## License
 
-MIT © Ferra Contributors. See [LICENSE](LICENSE).
+MIT © Viraj Shoor. See [LICENSE](LICENSE).
 
 Bug reports and small patches are welcome. Read the language tour and error reference before sending a change; tests live in `tests/` and should cover both a valid program and the diagnostic you care about.

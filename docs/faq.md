@@ -1,5 +1,7 @@
 # FAQ
 
+**Author:** Viraj Shoor
+
 Short answers for people writing Ferra v0 programs. Details live in the [language tour](language-tour.md) and [type system](type-system.md).
 
 ## Why does my program look like Python but reject Python?

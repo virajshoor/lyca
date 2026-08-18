@@ -1,5 +1,7 @@
 # Error reference
 
+**Author:** Viraj Shoor
+
 Every Ferra diagnostic has a code `FERnnn`. The compiler prints the code, a message, `file:line:col`, the source line, a caret, and sometimes a hint.
 
 ```

@@ -1,5 +1,7 @@
 # Ferra cookbook
 
+**Author:** Viraj Shoor
+
 Worked programs you can compile today. Each snippet is a complete `.fe` file unless noted. Build with:
 
 ```bash

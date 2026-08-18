@@ -1,5 +1,7 @@
 # Ferra cheatsheet
 
+**Author:** Viraj Shoor
+
 One-page reference for v0. See the [language tour](language-tour.md) for explanations and the [cookbook](cookbook.md) for full programs.
 
 ## File and CLI
