@@ -1,4 +1,4 @@
-# Ferra cheatsheet
+# Lyca cheatsheet
 
 **Author:** Viraj Shoor
 
@@ -7,16 +7,16 @@ One-page reference for v0. See the [language tour](language-tour.md) for explana
 ## File and CLI
 
 ```
-file.fe                 # source
-ferra build file.fe -o out
+file.lyca                 # source
+lyca build file.lyca -o out
 ./out                   # native binary; main() -> i32 is the exit code
 ```
 
-Spaces only. Comments: `# ...`. Extension: `.fe`. No REPL, no modules, one file.
+Spaces only. Comments: `# ...`. Extension: `.lyca`. No REPL, no modules, one file.
 
 ## Skeleton
 
-```ferra
+```lyca
 def main() -> i32:
     print("hello")
     return 0
@@ -34,7 +34,7 @@ def main() -> i32:
 | `Name` (struct) | no | nominal |
 | `&T` | yes | shared borrow |
 
-```ferra
+```lyca
 let a: i32 = 10
 let b: i64 = 10          # literal becomes i64 from context
 let x: f64 = 1.5
@@ -45,17 +45,17 @@ let a3: [i32; 3] = [1, 2, 3]
 
 ## Bindings
 
-```ferra
+```lyca
 let x: i32 = 1           # immutable
 let mut y: i32 = 2
 y = y + 1
 ```
 
-Every `let` needs a type. Assignment to a non-`mut` binding is `FER217`.
+Every `let` needs a type. Assignment to a non-`mut` binding is `LYC217`.
 
 ## Functions
 
-```ferra
+```lyca
 def add(a: i32, b: i32) -> i32:
     return a + b
 ```
@@ -64,7 +64,7 @@ Types on every parameter and the return. Every path must `return`. Recursion is 
 
 ## Control flow
 
-```ferra
+```lyca
 if n == 0:
     return 1
 elif n == 1:
@@ -95,7 +95,7 @@ No string `+`, no bitwise ops, no `+=`.
 
 ## Structs and arrays
 
-```ferra
+```lyca
 struct Point:
     x: i32
     y: i32
@@ -110,9 +110,9 @@ No methods, no inheritance. Field order in a literal can differ from the definit
 
 ## Ownership
 
-```ferra
+```lyca
 let s: string = "hi"
-let t: string = s        # moves s; using s is FER218
+let t: string = s        # moves s; using s is LYC218
 let r: &string = &s      # borrow; s stays usable
 print(s)                 # print takes &string, so this does not move
 ```
@@ -121,7 +121,7 @@ Copy types (`i32`, floats, `bool`, `&T`) can be used freely. Move types (`string
 
 ## Builtin
 
-```ferra
+```lyca
 print("hi")              # def print(s: &string) -> i32
 ```
 
@@ -131,11 +131,11 @@ Writes `s` plus a newline. Return value is `0`. That is the only builtin in v0.
 
 | Code | Meaning |
 |------|---------|
-| `FER003` | tab character |
-| `FER207` | type mismatch / no coercion |
-| `FER208` | missing `return` on a path |
-| `FER217` | assign to immutable `let` |
-| `FER218` | use after move |
-| `FER220` | mutate while borrowed |
+| `LYC003` | tab character |
+| `LYC207` | type mismatch / no coercion |
+| `LYC208` | missing `return` on a path |
+| `LYC217` | assign to immutable `let` |
+| `LYC218` | use after move |
+| `LYC220` | mutate while borrowed |
 
 Full list: [error-reference.md](error-reference.md).
