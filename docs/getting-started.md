@@ -1,5 +1,7 @@
 # Getting started
 
+**Author:** Viraj Shoor
+
 Ferra is a small, statically typed language with Python-like syntax. The compiler is written in TypeScript and emits LLVM IR, which `clang` lowers to a native binary.
 
 ## Requirements

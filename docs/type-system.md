@@ -1,5 +1,7 @@
 # Type system
 
+**Author:** Viraj Shoor
+
 Ferra is statically typed. Every function parameter, return, and `let` binding has an explicit type. The compiler rejects the program if any expression does not match its expected type. There is no type inference beyond integer/float literals taking the type of their context, and there is no implicit conversion between named types.
 
 ## Types

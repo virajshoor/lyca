@@ -1,5 +1,7 @@
 # Compiler architecture
 
+**Author:** Viraj Shoor
+
 The Ferra compiler is a TypeScript program (`src/`) that runs on Node.js. It does not load a native LLVM library. It writes LLVM IR as text and runs `clang` on that text.
 
 ```
