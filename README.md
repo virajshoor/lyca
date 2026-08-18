@@ -136,6 +136,9 @@ tests/
 
 - [Getting started](docs/getting-started.md) — install, hello world, build a binary
 - [Language tour](docs/language-tour.md) — syntax, types, control flow, functions
+- [Cheatsheet](docs/cheatsheet.md) — one-page syntax, types, and operators
+- [Cookbook](docs/cookbook.md) — complete programs (factorial, gcd, structs, arrays)
+- [FAQ](docs/faq.md) — common errors and Python-vs-Ferra surprises
 - [Type system](docs/type-system.md) — ownership, what is allowed and why
 - [Compiler architecture](docs/compiler-architecture.md) — internals for contributors
 - [Error reference](docs/error-reference.md) — every `FERnnn` code
