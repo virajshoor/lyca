@@ -1,22 +1,22 @@
-# Ferra
+# Lyca
 
 **Python-like syntax. LLVM-native binaries. Types you can trust.**
 
 Created by **Viraj Shoor**.
 
-[![Build](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/virajshoor/ferra-lang)
+[![Build](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/virajshoor/lyca)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-TypeScript-3178C6)](https://www.typescriptlang.org/)
 
-## Why Ferra
+## Why Lyca
 
-Ferra looks like Python so it is easy to read and easy for an LLM to generate on the first try: indentation, `def`, `if`, `for`, `return`. It does not behave like Python. Types are mandatory, there is no implicit coercion, and there is no garbage collector — a small ownership/borrow model keeps memory deterministic. The compiler emits LLVM IR and `clang` produces a native binary with C-like performance.
+Lyca looks like Python so it is easy to read and easy for an LLM to generate on the first try: indentation, `def`, `if`, `for`, `return`. It does not behave like Python. Types are mandatory, there is no implicit coercion, and there is no garbage collector — a small ownership/borrow model keeps memory deterministic. The compiler emits LLVM IR and `clang` produces a native binary with C-like performance.
 
 ## Example
 
-Fibonacci in Ferra, compiled to LLVM IR (simplified):
+Fibonacci in Lyca, compiled to LLVM IR (simplified):
 
-```ferra
+```lyca
 def fib(n: i32) -> i32:
     if n <= 1:
         return n
@@ -50,8 +50,8 @@ entry:
 Requires Node.js 18+ and `clang` on your `PATH`.
 
 ```bash
-git clone https://github.com/virajshoor/ferra-lang.git
-cd ferra-lang
+git clone https://github.com/virajshoor/lyca.git
+cd lyca
 npm install
 npm run build
 npm test
@@ -59,9 +59,9 @@ npm test
 
 ## Hello World
 
-Write `hello.fe`:
+Write `hello.lyca`:
 
-```ferra
+```lyca
 def main() -> i32:
     print("Hello, World!")
     return 0
@@ -70,7 +70,7 @@ def main() -> i32:
 Compile, run, check output:
 
 ```bash
-node dist/cli/index.js build hello.fe -o hello
+node dist/cli/index.js build hello.lyca -o hello
 ./hello
 ```
 
@@ -81,7 +81,7 @@ Hello, World!
 The same command works for the bundled examples:
 
 ```bash
-node dist/cli/index.js build examples/fib.fe -o /tmp/fib
+node dist/cli/index.js build examples/fib.lyca -o /tmp/fib
 /tmp/fib; echo $?
 # 55
 ```
@@ -119,7 +119,7 @@ src/
   ast/            AST node types
   typechecker/    Types + ownership
   codegen/        LLVM IR emitter
-  cli/            ferra build file.fe -o out
+  cli/            lyca build file.lyca -o out
   compile.ts      Pipeline driver
   diagnostics.ts  Error formatting
 docs/
@@ -129,8 +129,8 @@ docs/
   compiler-architecture.md
   error-reference.md
 examples/
-  hello.fe
-  fib.fe
+  hello.lyca
+  fib.lyca
 tests/
 ```
 
@@ -140,11 +140,11 @@ tests/
 - [Language tour](docs/language-tour.md) — syntax, types, control flow, functions
 - [Cheatsheet](docs/cheatsheet.md) — one-page syntax, types, and operators
 - [Cookbook](docs/cookbook.md) — complete programs (factorial, gcd, structs, arrays)
-- [FAQ](docs/faq.md) — common errors and Python-vs-Ferra surprises
+- [FAQ](docs/faq.md) — common errors and Python-vs-Lyca surprises
 - [Type system](docs/type-system.md) — ownership, what is allowed and why
 - [Compiler architecture](docs/compiler-architecture.md) — internals for contributors
-- [Error reference](docs/error-reference.md) — every `FERnnn` code
-- [Coding in Ferra (PDF)](docs/book/coding-in-ferra.pdf) — book-length tutorial by Viraj Shoor
+- [Error reference](docs/error-reference.md) — every `LYCnnn` code
+- [Coding in Lyca (PDF)](docs/book/coding-in-lyca.pdf) — book-length tutorial by Viraj Shoor
 
 ## License
 

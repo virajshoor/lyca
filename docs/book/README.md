@@ -1,12 +1,12 @@
-# Coding in Ferra
+# Coding in Lyca
 
 **Author:** Viraj Shoor
 
-Book-length tutorial for Ferra v0. The generated PDF is [coding-in-ferra.pdf](coding-in-ferra.pdf).
+Book-length tutorial for Lyca v0. The generated PDF is [coding-in-lyca.pdf](coding-in-lyca.pdf).
 
-Rebuild after editing `scripts/build_ferra_book.py`:
+Rebuild after editing `scripts/build_lyca_book.py`:
 
 ```bash
 pip install reportlab
-python3 scripts/build_ferra_book.py
+python3 scripts/build_lyca_book.py
 ```

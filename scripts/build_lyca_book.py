@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the 'Coding in Ferra' PDF book. Author: Viraj Shoor."""
+"""Build the 'Coding in Lyca' PDF book. Author: Viraj Shoor."""
 
 from __future__ import annotations
 
@@ -28,8 +28,8 @@ from reportlab.platypus import (
 )
 
 AUTHOR = "Viraj Shoor"
-TITLE = "Coding in Ferra"
-SUBTITLE = "A practical guide to writing native programs in Ferra v0"
+TITLE = "Coding in Lyca"
+SUBTITLE = "A practical guide to writing native programs in Lyca v0"
 YEAR = "2026"
 
 INK = HexColor("#1b2430")
@@ -241,7 +241,7 @@ def draw_body(canvas, doc) -> None:
     canvas.setFont("Times-Italic", 8)
     canvas.drawString(0.75 * inch, h - 0.48 * inch, f"{TITLE}  ·  {AUTHOR}")
     canvas.setFont("Times-Roman", 8)
-    canvas.drawRightString(w - 0.75 * inch, h - 0.48 * inch, "Ferra v0")
+    canvas.drawRightString(w - 0.75 * inch, h - 0.48 * inch, "Lyca v0")
     canvas.setStrokeColor(RULE)
     canvas.setLineWidth(0.4)
     canvas.line(0.75 * inch, 0.55 * inch, w - 0.75 * inch, 0.55 * inch)
@@ -266,7 +266,7 @@ def build_story(st: dict[str, ParagraphStyle]) -> list:
     story.append(Spacer(1, 0.35 * inch))
     story.append(Paragraph(f"by {AUTHOR}", st["cover_author"]))
     story.append(Spacer(1, 0.15 * inch))
-    story.append(Paragraph("Language designer and author of Ferra", st["cover_meta"]))
+    story.append(Paragraph("Language designer and author of Lyca", st["cover_meta"]))
     story.append(Paragraph("Python-like syntax. LLVM-native binaries. Types you can trust.", st["cover_meta"]))
     story.append(NextPageTemplate("body"))
     story.append(PageBreak())
@@ -274,8 +274,8 @@ def build_story(st: dict[str, ParagraphStyle]) -> list:
     story.append(H1("About this book"))
     story.append(
         P(
-            f"This book teaches you how to write programs in Ferra, a small, statically typed "
-            f"language created by {AUTHOR}. Ferra looks like Python so you can read it at a glance: "
+            f"This book teaches you how to write programs in Lyca, a small, statically typed "
+            f"language created by {AUTHOR}. Lyca looks like Python so you can read it at a glance: "
             "indentation, <font face='Courier'>def</font>, <font face='Courier'>if</font>, "
             "<font face='Courier'>for</font>, <font face='Courier'>return</font>. It does not behave "
             "like Python. Types are mandatory, there is no implicit coercion, and there is no garbage "
@@ -295,10 +295,10 @@ def build_story(st: dict[str, ParagraphStyle]) -> list:
 
     story.append(H1("Contents"))
     toc = [
-        "1.  What Ferra is",
+        "1.  What Lyca is",
         "2.  Install the compiler",
         "3.  Your first program",
-        "4.  Anatomy of a Ferra file",
+        "4.  Anatomy of a Lyca file",
         "5.  Types and literals",
         "6.  Variables and mutability",
         "7.  Functions",
@@ -319,10 +319,10 @@ def build_story(st: dict[str, ParagraphStyle]) -> list:
     story.append(Spacer(1, 0.2 * inch))
     story.append(PageBreak())
 
-    story.append(H1("1. What Ferra is"))
+    story.append(H1("1. What Lyca is"))
     story.append(
         P(
-            "Ferra is a compiled language. You write a <font face='Courier'>.fe</font> file, run the "
+            "Lyca is a compiled language. You write a <font face='Courier'>.lyca</font> file, run the "
             "compiler, and get a native executable. There is no REPL in v0 and no virtual machine. "
             "The pipeline is lexer, parser, type checker (including ownership), LLVM IR, then "
             "<font face='Courier'>clang</font>."
@@ -350,15 +350,15 @@ def build_story(st: dict[str, ParagraphStyle]) -> list:
     )
     story.append(
         P(
-            "<font face='Courier'>llc</font> is not required. Ferra writes a <font face='Courier'>.ll</font> "
+            "<font face='Courier'>llc</font> is not required. Lyca writes a <font face='Courier'>.ll</font> "
             "file and asks <font face='Courier'>clang</font> to assemble and link it."
         )
     )
 
     story.append(H1("2. Install the compiler"))
     story.append(C(
-        """git clone https://github.com/virajshoor/ferra-lang.git
-cd ferra-lang
+        """git clone https://github.com/virajshoor/lyca.git
+cd lyca
 npm install
 npm run build
 npm test"""
@@ -367,14 +367,14 @@ npm test"""
     story.append(
         P(
             "The CLI is <font face='Courier'>node dist/cli/index.js</font>. After a successful build "
-            "you can also <font face='Courier'>npm link</font> and run <font face='Courier'>ferra</font> "
+            "you can also <font face='Courier'>npm link</font> and run <font face='Courier'>lyca</font> "
             "directly. Throughout this book the long form is used so the commands work from a fresh clone."
         )
     )
     story.append(C("node dist/cli/index.js --help"))
     story.append(
         P(
-            "Expected usage is <font face='Courier'>ferra build &lt;file.fe&gt; -o &lt;output&gt;</font>. "
+            "Expected usage is <font face='Courier'>lyca build &lt;file.lyca&gt; -o &lt;output&gt;</font>. "
             "That command writes LLVM IR to <font face='Courier'>output.ll</font> and a native binary "
             "to <font face='Courier'>output</font>."
         )
@@ -383,7 +383,7 @@ npm test"""
     story.append(H1("3. Your first program"))
     story.append(
         P(
-            "Create <font face='Courier'>hello.fe</font>. Every Ferra program needs "
+            "Create <font face='Courier'>hello.lyca</font>. Every Lyca program needs "
             "<font face='Courier'>def main() -&gt; i32</font>. The integer you return is the process "
             "exit code."
         )
@@ -393,9 +393,9 @@ npm test"""
     print("Hello, World!")
     return 0"""
     ))
-    story.append(Paragraph("hello.fe — the smallest useful Ferra program.", st["caption"]))
+    story.append(Paragraph("hello.lyca — the smallest useful Lyca program.", st["caption"]))
     story.append(C(
-        """node dist/cli/index.js build hello.fe -o hello
+        """node dist/cli/index.js build hello.lyca -o hello
 ./hello"""
     ))
     story.append(
@@ -410,7 +410,7 @@ npm test"""
     story.append(H2("Fibonacci as an exit code"))
     story.append(
         P(
-            "The bundled example <font face='Courier'>examples/fib.fe</font> returns "
+            "The bundled example <font face='Courier'>examples/fib.lyca</font> returns "
             "<font face='Courier'>fib(10)</font> from <font face='Courier'>main</font>. The process "
             "exit code is therefore 55 — a convenient way to check a small integer result without "
             "formatting numbers, which v0 cannot do yet."
@@ -426,13 +426,13 @@ def main() -> i32:
     return fib(10)"""
     ))
     story.append(C(
-        """node dist/cli/index.js build examples/fib.fe -o /tmp/fib
+        """node dist/cli/index.js build examples/fib.lyca -o /tmp/fib
 /tmp/fib
 echo $?
 # 55"""
     ))
 
-    story.append(H1("4. Anatomy of a Ferra file"))
+    story.append(H1("4. Anatomy of a Lyca file"))
     story.append(
         P(
             "A program is a sequence of <font face='Courier'>struct</font> and "
@@ -440,7 +440,7 @@ echo $?
             "starts at <font face='Courier'>main</font>. Comments run from "
             "<font face='Courier'>#</font> to the end of the line. Blocks are indentation-based: a "
             "colon that introduces a block must be followed by a newline and an indented body. "
-            "Ferra has no <font face='Courier'>pass</font>; an empty block is an error."
+            "Lyca has no <font face='Courier'>pass</font>; an empty block is an error."
         )
     )
     story.append(C(
@@ -518,7 +518,7 @@ let a3: [i32; 3] = [1, 2, 3]"""
         P(
             "Every <font face='Courier'>let</font> needs a type annotation. Bindings are immutable "
             "unless you write <font face='Courier'>let mut</font>. Assignment to a plain "
-            "<font face='Courier'>let</font> is <font face='Courier'>FER217</font>."
+            "<font face='Courier'>let</font> is <font face='Courier'>LYC217</font>."
         )
     )
     story.append(C(
@@ -532,7 +532,7 @@ let a3: [i32; 3] = [1, 2, 3]"""
         P(
             "There is no <font face='Courier'>+=</font>. Write <font face='Courier'>y = y + 1</font>. "
             "You also cannot mutate a value while a borrow of it is live; that is "
-            "<font face='Courier'>FER220</font>."
+            "<font face='Courier'>LYC220</font>."
         )
     )
 
@@ -556,7 +556,7 @@ def abs(x: i32) -> i32:
     story.append(
         P(
             "Every path through a function must <font face='Courier'>return</font> a value "
-            "(<font face='Courier'>FER208</font>). An <font face='Courier'>if</font> without "
+            "(<font face='Courier'>LYC208</font>). An <font face='Courier'>if</font> without "
             "<font face='Courier'>else</font> does not cover the rest of the function, which is why "
             "<font face='Courier'>abs</font> still needs a <font face='Courier'>return x</font> after "
             "the <font face='Courier'>if</font>."
@@ -567,8 +567,8 @@ def abs(x: i32) -> i32:
         P(
             "<font face='Courier'>main</font> takes no parameters and must return "
             "<font face='Courier'>i32</font>. Missing <font face='Courier'>main</font> is "
-            "<font face='Courier'>FER214</font>. A <font face='Courier'>main</font> with parameters "
-            "or a non-<font face='Courier'>i32</font> return is <font face='Courier'>FER215</font>. "
+            "<font face='Courier'>LYC214</font>. A <font face='Courier'>main</font> with parameters "
+            "or a non-<font face='Courier'>i32</font> return is <font face='Courier'>LYC215</font>. "
             "On Unix the shell only reports exit codes 0 through 255, so return small integers from "
             "<font face='Courier'>main</font> or print a message and return 0."
         )
@@ -710,7 +710,7 @@ def main() -> i32:
 let b: i32 = a           # a is still usable
 
 let s: string = "hi"
-let t: string = s        # s is moved; using s is FER218"""
+let t: string = s        # s is moved; using s is LYC218"""
     ))
     story.append(
         P(
@@ -731,10 +731,10 @@ let t: string = s        # s is moved; using s is FER218"""
     story.append(
         bullets(
             [
-                "<b>No use after move.</b> Once a move-type binding is moved, any use is FER218.",
-                "<b>No borrow after move.</b> <font face='Courier'>&amp;s</font> after a move is FER223.",
-                "<b>No move while borrowed.</b> If a live <font face='Courier'>&amp;T</font> points at s, moving s is FER219.",
-                "<b>No mutate while borrowed.</b> Assigning to s while borrowed is FER220.",
+                "<b>No use after move.</b> Once a move-type binding is moved, any use is LYC218.",
+                "<b>No borrow after move.</b> <font face='Courier'>&amp;s</font> after a move is LYC223.",
+                "<b>No move while borrowed.</b> If a live <font face='Courier'>&amp;T</font> points at s, moving s is LYC219.",
+                "<b>No mutate while borrowed.</b> Assigning to s while borrowed is LYC220.",
                 "<b>Immutability.</b> <font face='Courier'>let x</font> cannot be assigned; <font face='Courier'>let mut x</font> can, subject to the previous rule.",
             ],
             st,
@@ -756,7 +756,7 @@ let t: string = s        # s is moved; using s is FER218"""
     if true:
         let r: &string = &s
         print(r)
-        # s = "b"        # FER220, r is still in scope
+        # s = "b"        # LYC220, r is still in scope
     s = "b"              # ok, r is gone
     print(s)
     return 0"""
@@ -806,7 +806,7 @@ let t: string = s        # s is moved; using s is FER218"""
     story.append(
         P(
             "Each program below is complete. Compile with "
-            "<font face='Courier'>node dist/cli/index.js build file.fe -o /tmp/out</font> and run "
+            "<font face='Courier'>node dist/cli/index.js build file.lyca -o /tmp/out</font> and run "
             "<font face='Courier'>/tmp/out</font>."
         )
     )
@@ -907,29 +907,29 @@ def main() -> i32:
     story.append(H1("15. Reading compiler errors"))
     story.append(
         P(
-            "Every diagnostic has a code <font face='Courier'>FERnnn</font>, a message, a "
+            "Every diagnostic has a code <font face='Courier'>LYCnnn</font>, a message, a "
             "<font face='Courier'>file:line:col</font> span, the source line, a caret, and sometimes "
             "a hint. There are no warnings in v0; anything the compiler prints is fatal. If type "
             "checking fails, nothing is written."
         )
     )
     story.append(C(
-        """error[FER207]: type mismatch: expected i32, found bool
- --> hello.fe:2:12
+        """error[LYC207]: type mismatch: expected i32, found bool
+ --> hello.lyca:2:12
   |
 2 |     return true
   |            ^^^^
   |
-  = hint: Ferra does not coerce types"""
+  = hint: Lyca does not coerce types"""
     ))
     story.append(
         P(
             "Fix the source at that location and rebuild. Common codes while you learn: "
-            "<font face='Courier'>FER003</font> tab character, <font face='Courier'>FER207</font> "
-            "type mismatch, <font face='Courier'>FER208</font> missing return, "
-            "<font face='Courier'>FER217</font> assign to immutable "
-            "<font face='Courier'>let</font>, <font face='Courier'>FER218</font> use after move, "
-            "<font face='Courier'>FER220</font> mutate while borrowed. The full list lives in "
+            "<font face='Courier'>LYC003</font> tab character, <font face='Courier'>LYC207</font> "
+            "type mismatch, <font face='Courier'>LYC208</font> missing return, "
+            "<font face='Courier'>LYC217</font> assign to immutable "
+            "<font face='Courier'>let</font>, <font face='Courier'>LYC218</font> use after move, "
+            "<font face='Courier'>LYC220</font> mutate while borrowed. The full list lives in "
             "<font face='Courier'>docs/error-reference.md</font>."
         )
     )
@@ -969,7 +969,7 @@ def main() -> i32:
     story.append(H1("17. A one-page cheatsheet"))
     story.append(C(
         """# build
-node dist/cli/index.js build file.fe -o out
+node dist/cli/index.js build file.lyca -o out
 
 # skeleton
 def main() -> i32:
@@ -1003,14 +1003,14 @@ let t: string = s            # moves s"""
     story.append(H1("About the author"))
     story.append(
         P(
-            f"<b>{AUTHOR}</b> designed Ferra and wrote this book. The language, the compiler, "
-            "the documentation, and the examples in this repository are his work. Ferra is released "
+            f"<b>{AUTHOR}</b> designed Lyca and wrote this book. The language, the compiler, "
+            "the documentation, and the examples in this repository are his work. Lyca is released "
             f"under the MIT License. Copyright (c) {YEAR} {AUTHOR}."
         )
     )
     story.append(
         P(
-            "The source lives at <font face='Courier'>https://github.com/virajshoor/ferra-lang</font>. "
+            "The source lives at <font face='Courier'>https://github.com/virajshoor/lyca</font>. "
             "Bug reports and small patches are welcome. Read the language tour and error reference "
             "before sending a change; tests live in <font face='Courier'>tests/</font> and should "
             "cover both a valid program and the diagnostic you care about."
@@ -1019,7 +1019,7 @@ let t: string = s            # moves s"""
     story.append(Spacer(1, 0.35 * inch))
     story.append(Paragraph(f"{TITLE}", st["h2"]))
     story.append(Paragraph(f"Written by {AUTHOR}", st["body_left"]))
-    story.append(Paragraph(f"Ferra v0  ·  {YEAR}", st["body_left"]))
+    story.append(Paragraph(f"Lyca v0  ·  {YEAR}", st["body_left"]))
     return story
 
 
@@ -1028,7 +1028,7 @@ def main() -> None:
     parser.add_argument(
         "-o",
         "--output",
-        default=str(Path(__file__).resolve().parent.parent / "docs" / "book" / "coding-in-ferra.pdf"),
+        default=str(Path(__file__).resolve().parent.parent / "docs" / "book" / "coding-in-lyca.pdf"),
         help="Output PDF path",
     )
     args = parser.parse_args()

@@ -2,13 +2,13 @@
 
 **Author:** Viraj Shoor
 
-Ferra source files use the `.fe` extension. A program is a sequence of `struct` and `def` items. Execution starts at `main`.
+Lyca source files use the `.lyca` extension. A program is a sequence of `struct` and `def` items. Execution starts at `main`.
 
 ## Layout
 
 Blocks are indentation-based. Use spaces, never tabs. A colon `:` introducing a block must be followed by a newline and an indented body.
 
-```ferra
+```lyca
 def abs(x: i32) -> i32:
     if x < 0:
         return -x
@@ -35,7 +35,7 @@ There is no `None`, no optional, no dynamic `Any`, and no implicit conversion be
 
 Integer literals default to `i32` unless the expected type is `i64`:
 
-```ferra
+```lyca
 let a: i32 = 10
 let b: i64 = 10
 ```
@@ -48,30 +48,30 @@ String literals use double quotes. Escapes: `\n`, `\t`, `\\`, `\"`.
 
 Every `let` needs a type annotation.
 
-```ferra
+```lyca
 let x: i32 = 1
 let mut y: i32 = 2
 y = y + 1
 ```
 
-Without `mut`, assignment is an error (`FER217`).
+Without `mut`, assignment is an error (`LYC217`).
 
 ## Functions
 
 Parameter types and the return type are mandatory. Recursion is allowed.
 
-```ferra
+```lyca
 def add(a: i32, b: i32) -> i32:
     return a + b
 ```
 
 Call syntax is `name(args)`. There are no methods and no first-class function values in v0.
 
-Every path through a function must `return` a value (`FER208`). `if` without `else` does not count as covering a path.
+Every path through a function must `return` a value (`LYC208`). `if` without `else` does not count as covering a path.
 
 `main` is special:
 
-```ferra
+```lyca
 def main() -> i32:
     return 0
 ```
@@ -80,15 +80,15 @@ No parameters. Return type `i32`. That integer is the process exit code (Unix: `
 
 ## Builtin: `print`
 
-```ferra
+```lyca
 def print(s: &string) -> i32
 ```
 
 Declared by the compiler, not in user source. It prints `s` plus a newline via libc `puts`. The return value is `0`.
 
-If you pass a `string` where `&string` is expected, Ferra inserts a borrow. These are equivalent:
+If you pass a `string` where `&string` is expected, Lyca inserts a borrow. These are equivalent:
 
-```ferra
+```lyca
 print("hi")
 print(&s)
 print(s)
@@ -102,7 +102,7 @@ The last form does **not** move `s`.
 
 The condition must be `bool`. There is no truthiness.
 
-```ferra
+```lyca
 if n == 0:
     return 1
 elif n == 1:
@@ -115,7 +115,7 @@ else:
 
 ### while
 
-```ferra
+```lyca
 let mut i: i32 = 0
 while i < 10:
     i = i + 1
@@ -125,7 +125,7 @@ while i < 10:
 
 `for name in start..end:` iterates `i32` values in the half-open interval `[start, end)`. `name` is a mutable `i32` local for the loop body.
 
-```ferra
+```lyca
 let mut s: i32 = 0
 for i in 0..4:
     s = s + i
@@ -148,7 +148,7 @@ There is no `+` for strings. There are no bitwise operators.
 
 ## Structs
 
-```ferra
+```lyca
 struct Point:
     x: i32
     y: i32
@@ -166,7 +166,7 @@ No methods, no inheritance, no `self`. Field order in the literal does not have 
 
 ## Arrays
 
-```ferra
+```lyca
 let mut a: [i32; 3] = [1, 2, 3]
 a[0] = 8
 let x: i32 = a[1]
@@ -180,16 +180,16 @@ Copy types (`i32`, `i64`, `f32`, `f64`, `bool`, `&T`) can be used freely.
 
 Move types (`string`, arrays, structs) are moved on use as a value:
 
-```ferra
+```lyca
 let s: string = "hi"
 let t: string = s   # moves s
 print(t)
-# print(s)          # FER218 use of moved value
+# print(s)          # LYC218 use of moved value
 ```
 
 Borrow instead of moving:
 
-```ferra
+```lyca
 let s: string = "hi"
 let r: &string = &s
 print(r)
@@ -200,7 +200,7 @@ You cannot move or mutate a value while a borrow of it is live. Borrows of local
 
 ## A complete file
 
-```ferra
+```lyca
 struct Pair:
     a: i32
     b: i32

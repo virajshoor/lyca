@@ -3,11 +3,11 @@ import { parseArgs } from "node:util";
 import { CompileError, compileFile } from "../compile";
 
 function help(): string {
-  return `Ferra compiler
+  return `Lyca compiler
 
 Usage:
-  ferra build <file.fe> -o <output>
-  ferra --help
+  lyca build <file.lyca> -o <output>
+  lyca --help
 
 Options:
   -o, --output    Output path for the native binary
@@ -32,7 +32,7 @@ function main(): void {
 
   const [cmd, file] = positionals;
   if (cmd !== "build" || !file) {
-    process.stderr.write("error: expected `ferra build <file.fe> -o <output>`\n");
+    process.stderr.write("error: expected `lyca build <file.lyca> -o <output>`\n");
     process.exit(1);
   }
   if (!values.output) {

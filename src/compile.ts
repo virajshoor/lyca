@@ -25,7 +25,7 @@ export function compileFile(path: string, output: string): void {
   const r = spawnSync("clang", [ll, "-o", absOut, "-Wno-override-module"], { encoding: "utf8" });
   if (r.status !== 0) {
     throw new CompileError(
-      "FER301",
+      "LYC301",
       `clang failed to compile LLVM IR${r.stderr ? ":\n" + r.stderr : ""}`,
       { line: 1, col: 1, endLine: 1, endCol: 1 },
       filename,

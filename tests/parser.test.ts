@@ -4,7 +4,7 @@ import { lex } from "../src/lexer";
 import { parse } from "../src/parser";
 
 function ast(src: string) {
-  return parse(lex(src, "t.fe"), src, "t.fe");
+  return parse(lex(src, "t.lyca"), src, "t.lyca");
 }
 
 function err(src: string): CompileError {
@@ -77,27 +77,27 @@ def main() -> i32:
 
   it("requires def or struct at top level", () => {
     const e = err("let x: i32 = 1\n");
-    expect(e.code).toBe("FER101");
+    expect(e.code).toBe("LYC101");
     expect(e.span.line).toBe(1);
     expect(e.format()).toContain("expected 'def' or 'struct'");
   });
 
   it("reports missing token with location", () => {
     const e = err("def main( -> i32:\n    return 0\n");
-    expect(e.code).toBe("FER102");
+    expect(e.code).toBe("LYC102");
     expect(e.span.line).toBe(1);
-    expect(e.format()).toContain("error[FER102]");
+    expect(e.format()).toContain("error[LYC102]");
   });
 
   it("rejects assignment to a literal", () => {
     const e = err("def main() -> i32:\n    1 = 2\n    return 0\n");
-    expect(e.code).toBe("FER105");
+    expect(e.code).toBe("LYC105");
     expect(e.span.line).toBe(2);
   });
 
   it("rejects a missing indented block after ':'", () => {
     const e = err("def main() -> i32:\n    if true:\n    return 0\n");
-    expect(e.code).toBe("FER102");
+    expect(e.code).toBe("LYC102");
     expect(e.format()).toContain("expected indent");
   });
 });

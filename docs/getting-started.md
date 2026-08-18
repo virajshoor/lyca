@@ -2,20 +2,20 @@
 
 **Author:** Viraj Shoor
 
-Ferra is a small, statically typed language with Python-like syntax. The compiler is written in TypeScript and emits LLVM IR, which `clang` lowers to a native binary.
+Lyca is a small, statically typed language with Python-like syntax. The compiler is written in TypeScript and emits LLVM IR, which `clang` lowers to a native binary.
 
 ## Requirements
 
 - Node.js 18 or newer
-- `clang` on your `PATH` (Apple Clang or LLVM Clang). Ferra shells out to `clang` to assemble and link the generated `.ll` file.
+- `clang` on your `PATH` (Apple Clang or LLVM Clang). Lyca shells out to `clang` to assemble and link the generated `.ll` file.
 
 `llc` is not required. `clang` compiles LLVM IR directly.
 
 ## Install the compiler
 
 ```bash
-git clone https://github.com/virajshoor/ferra-lang.git
-cd ferra-lang
+git clone https://github.com/virajshoor/lyca.git
+cd lyca
 npm install
 npm run build
 ```
@@ -30,14 +30,14 @@ Or link it:
 
 ```bash
 npm link
-ferra --help
+lyca --help
 ```
 
 ## Hello World
 
-Create `hello.fe`:
+Create `hello.lyca`:
 
-```ferra
+```lyca
 def main() -> i32:
     print("Hello, World!")
     return 0
@@ -53,7 +53,7 @@ Rules that trip people up:
 Build and run:
 
 ```bash
-node dist/cli/index.js build hello.fe -o hello
+node dist/cli/index.js build hello.lyca -o hello
 ./hello
 ```
 
@@ -67,10 +67,10 @@ Exit code is `0`.
 
 ## Fibonacci
 
-`examples/fib.fe` is a complete program. `main` returns `fib(10)`, so the process exit code is `55`.
+`examples/fib.lyca` is a complete program. `main` returns `fib(10)`, so the process exit code is `55`.
 
 ```bash
-node dist/cli/index.js build examples/fib.fe -o /tmp/fib
+node dist/cli/index.js build examples/fib.lyca -o /tmp/fib
 /tmp/fib
 echo $?
 ```
@@ -81,7 +81,7 @@ echo $?
 
 ## What the compiler writes
 
-`ferra build file.fe -o output` does two things:
+`lyca build file.lyca -o output` does two things:
 
 1. Writes LLVM IR to `output.ll` (same path as the binary, with `.ll` appended).
 2. Invokes `clang output.ll -o output`.
@@ -89,13 +89,13 @@ echo $?
 If type checking fails, nothing is written. Errors look like:
 
 ```
-error[FER207]: type mismatch: expected i32, found bool
- --> hello.fe:2:12
+error[LYC207]: type mismatch: expected i32, found bool
+ --> hello.lyca:2:12
   |
 2 |     return true
   |            ^^^^
   |
-  = hint: Ferra does not coerce types
+  = hint: Lyca does not coerce types
 ```
 
 Fix the source and rebuild. There is no REPL in v0.
