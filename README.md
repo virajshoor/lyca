@@ -136,6 +136,7 @@ tests/
 
 ## Documentation
 
+- [Prompt for AI models](prompt.md) — condensed, self-contained language brief to paste into an AI model's context
 - [Getting started](docs/getting-started.md) — install, hello world, build a binary
 - [Language tour](docs/language-tour.md) — syntax, types, control flow, functions
 - [Cheatsheet](docs/cheatsheet.md) — one-page syntax, types, and operators
