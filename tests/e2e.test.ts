@@ -14,9 +14,9 @@ describe("e2e", () => {
   it("emits LLVM IR for fib", () => {
     const src = readFileSync("examples/fib.fe", "utf8");
     const ir = compileSource(src, "examples/fib.fe");
-    expect(ir).toContain("define i32 @fib(i32 %p0)");
+    expect(ir).toContain("define internal i32 @ferra.fn.fib(ptr %ctx, i32 %p0)");
     expect(ir).toContain("define i32 @main()");
-    expect(ir).toContain("call i32 @fib");
+    expect(ir).toContain("call i32 @ferra.fn.fib");
   });
 
   it("compiles fib.fe to a binary whose exit code matches a JS reference", () => {

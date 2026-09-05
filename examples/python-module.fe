@@ -1,0 +1,5 @@
+def add(x: i32, y: i32) -> i32:
+    return x + y
+
+def sum3(a: &[i32; 3]) -> i32:
+    return a[0] + a[1] + a[2]

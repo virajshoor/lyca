@@ -1,127 +1,46 @@
 # Compiler architecture
 
-The Ferra compiler is a TypeScript program (`src/`) that runs on Node.js. It does not load a native LLVM library. It writes LLVM IR as text and runs `clang` on that text.
+The compiler is TypeScript running on Node.js. It emits textual LLVM IR and invokes clang. There is no native Node LLVM addon and no custom optimizer.
 
-```
-.fe source
-    │
-    ▼
- lexer      src/lexer
-    │  Token[]  (incl. indent / dedent / newline)
-    ▼
- parser     src/parser     → AST (src/ast)
-    │
-    ▼
- typecheck  src/typechecker
-    │  ownership + types
-    ▼
- codegen    src/codegen    → LLVM IR string
-    │
-    ▼
- clang file.ll -o binary
+```text
+.fe source → lexer → AST → type/ownership checks → LLVM IR → clang → artifact
+                                           ↘ optional C Python wrappers ↗
 ```
 
-`src/compile.ts` is the driver. `src/cli/index.ts` is the `ferra` command (`node:util` `parseArgs`, no extra CLI package).
+## Frontend
 
-## Why not llvm-bindings
+The lexer emits indentation tokens only outside brackets. Continuation lines and comments do not create nested blocks. Operator tables are reused; identifier scanning uses character comparisons. The recursive-descent parser consumes normalized tokens without a second bracket-depth state machine. Simple statements require separators.
 
-`llvm-bindings` (and similar native addons) must be compiled against a specific LLVM version. That fails often on macOS/Homebrew and in CI. Emitting `.ll` and calling `clang` is the same backend pipeline LLVM itself uses, with zero native Node addons. The IR is ordinary LLVM 15+ opaque-pointer IR (`ptr`).
+The type checker collects signatures before checking bodies, so recursion works. It stores checked expression types and resolved annotations alongside the AST. Codegen uses that metadata; it does not reconstruct Ferra types from LLVM strings or guess a struct from declaration order.
 
-## Directories
+Each lexical binding has its own ownership record. Loans refer to that record, not a variable's spelling. Branches check against independent incoming move states and merge only paths that continue. Copy-only scopes avoid unnecessary move-state merging. Loops conservatively reject moves of outer values. References cannot escape through returns or aggregates; reference bindings and range variables are immutable.
 
-| Path | Role |
-|------|------|
-| `src/lexer` | Hand-written scanner. Keywords, numbers, strings, operators, Python-style `indent`/`dedent`. |
-| `src/parser` | Recursive-descent parser. One token of lookahead. Newlines inside `()`, `[]`, `{}` are skipped. |
-| `src/ast` | Discriminated unions for types, expressions, statements, decls. |
-| `src/typechecker` | Resolves types, enforces annotations, tracks move/borrow state per local. |
-| `src/codegen` | Walks the checked AST and concatenates LLVM IR. Locals are `alloca` + load/store (no SSA construction). |
-| `src/cli` | `ferra build <file> -o <out>`. |
-| `src/diagnostics.ts` | `CompileError` with `code`, span, source snippet, optional hint. |
-| `tests/` | Vitest: lexer, parser, typechecker, plus e2e (`clang` + run). |
+## LLVM emission
 
-## Lexer
+- Integers/floats/bools use LLVM scalar types; strings are `{ ptr, i64 }`.
+- Structs and arrays are native aggregates; shared references are actual `ptr` values.
+- Every fixed allocation is emitted in the function entry block. clang can promote scalar locals to SSA and remove dead storage.
+- Scope exits restore shadowed names. Both range bounds are evaluated before the loop variable is introduced.
+- Aggregate literals use `insertvalue`; nested fields use their checked types.
+- `and`/`or` short-circuit. Integer add/subtract/multiply wrap; floating comparisons preserve NaN semantics.
+- Dynamic index and signed division checks branch to a runtime error handler. Statically proven valid literal indices and positive literal divisors need no dynamic check.
+- User functions/structs have prefixed LLVM symbols to avoid collisions with libc/runtime names.
+- String constants are interned per compilation.
 
-`lex(source, filename): Token[]`
+The default clang level is `-O2`; `--opt 0`, `1`, and `3` are available. No `-ffast-math` or host-specific instruction tuning is enabled. Programs without runtime calls do not compile/link the C support file.
 
-- Tracks an indent stack. A deeper indent emits `indent`; a shallower one emits one `dedent` per matched level. A depth that does not match a previous level is `FER004`.
-- Blank lines and `#` comment-only lines do not change indent.
-- Tabs are `FER003`.
-- `1..10` is `int`, `..`, `int` — the second `.` prevents float lexing.
-- EOF inserts remaining `dedent`s and one `eof` token.
+## Python boundary
 
-## Parser
+`extern python "module" def name(...) -> T` creates a foreign signature. `--target python` instead produces an extension exposing public local functions. Both can be used in the same file.
 
-`parse(tokens, source, filename): Program`
+C wrappers use the selected interpreter's CPython headers and ABI. A pointer-only generated interface transfers input/output storage across C and LLVM; C aggregate-by-value calling conventions are deliberately avoided. Python conversions validate type, numeric range, and array length. Python references are released on success and error.
 
-Grammar (informal):
+Generated functions pass an opaque context pointer. Core native builds use null and terminate with a diagnostic on runtime failure. Python builds allocate a context per outer call and catch errors in the C wrapper with `setjmp`/`longjmp`; GIL remains held. Python-derived string buffers belong to that context. No context or `PyObject` pointer is stored in process-global compiler-generated state.
 
-```
-program   ::= (fn | struct)*
-fn        ::= "def" ident "(" params ")" "->" type ":" block
-struct    ::= "struct" ident ":" NEWLINE INDENT (ident ":" type NEWLINE)+ DEDENT
-block     ::= ":" NEWLINE INDENT stmt+ DEDENT
-stmt      ::= let | return | if | while | for | assign | expr
-let       ::= "let" "mut"? ident ":" type "=" expr
-if        ::= "if" expr block ("elif" expr block)* ("else" block)?
-for       ::= "for" ident "in" expr ".." expr block
-```
+## Build and validation
 
-Expression precedence, tightest last: `or`, `and`, `not`, comparisons (one operator, not chained), `+ -`, `* / %`, unary `-` and `&`, postfix call/index/field.
+`compileSource(source, filename, options?)` returns checked textual IR. `compileFile(path, output, options?)` returns the actual artifact path. Options select native/Python target, optimization level, interpreter, and import name. Existing two-argument calls remain valid.
 
-On failure it throws `CompileError` (`FER101`, `FER102`, `FER104`, `FER105`).
+The build copies C runtime assets into `dist/runtime`. `compileFile` stages compilation next to the destination and publishes the executable only after clang succeeds. Missing tools, unsupported environments, and clang failures become `FER301` diagnostics. An existing executable survives failed compilation.
 
-## Type checker
-
-`typecheck(ast, source, filename): CheckedProgram`
-
-1. Collect struct names, then resolve field types (so structs can refer to earlier structs; recursive structs are not useful without indirection).
-2. Install builtin `print(s: &string) -> i32`.
-3. Collect function signatures (enables recursion).
-4. Require `main() -> i32`.
-5. Walk each function body with a stack of scopes. Each local has `{ type, mut, state: owned|moved, borrowCount, borrowedFrom? }`.
-
-Moves happen when a move-type name is used as an rvalue. Field/index **places** do not move the parent unless the projected value itself is a move type.
-
-There is no separate typed AST. Codegen re-resolves types from annotations and from LLVM types of allocas.
-
-## Codegen
-
-Each Ferra function becomes an LLVM `define`. Parameters are stored into allocas so the rest of the function is load/store.
-
-- `i32`/`i64`/`f32`/`f64`/`bool` → `i32`/`i64`/`float`/`double`/`i1`
-- `string` and `&string` → `%String = { ptr, i64 }`
-- struct → `%Name = type { ... }`
-- `[T; N]` → `[N x T]`
-
-`print` is emitted as an LLVM function that `extractvalue`s the pointer and calls `puts`.
-
-`if`/`while`/`for` use explicit labels and `br`. `and`/`or` short-circuit through a stack slot (no `phi`).
-
-String literals become `private unnamed_addr constant [N x i8]` arrays; codegen GEP's to the first byte.
-
-After IR is written to `output.ll`, `compileFile` runs:
-
-```
-clang output.ll -o output -Wno-override-module
-```
-
-`FER301` is a clang failure or an internal codegen bug.
-
-## Adding a language feature
-
-1. Token, if needed, in `src/lexer`.
-2. AST node in `src/ast`.
-3. Parse it in `src/parser`.
-4. Type rules and error code in `src/typechecker`; add the code to `docs/error-reference.md`.
-5. LLVM emission in `src/codegen`.
-6. Tests for valid and invalid programs, including span checks on errors.
-7. `npm test` (includes e2e if `clang` is present).
-
-## Tests
-
-```
-npm test
-```
-
-Vitest runs `tests/*.test.ts`. E2E compiles `examples/fib.fe` and `examples/hello.fe` with the real clang pipeline and checks exit code `55` and stdout `Hello, World!`.
+Tests exercise parsing, ownership diagnostics, emitted allocation placement, native execution at O0/O2, Python conversion, exception propagation, embedded Python, and failed-build preservation. Benchmarks separately report frontend stages, full source-to-IR time, build latency, native runtime, and Python call overhead. Performance numbers are reports, not noisy CI pass/fail thresholds.

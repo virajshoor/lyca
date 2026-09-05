@@ -7,9 +7,12 @@
     "ferra": "./dist/cli/index.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-runtime.cjs",
     "test": "vitest run",
-    "ferra": "node dist/cli/index.js"
+    "ferra": "node dist/cli/index.js",
+    "bench": "npm run build && node benchmarks/run.cjs",
+    "test:python": "FERRA_REQUIRE_PYTHON=1 vitest run tests/python.test.ts",
+    "bench:python": "npm run build && node benchmarks/python.cjs"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",

@@ -4,6 +4,7 @@ import {
   FnDecl,
   Param,
   Program,
+  PythonDecl,
   Stmt,
   StructDecl,
   TypeAst,
@@ -17,7 +18,6 @@ export function parse(tokens: Token[], source: string, filename: string): Progra
 
 class Parser {
   private i = 0;
-  private depth = 0;
 
   constructor(
     private tokens: Token[],
@@ -32,7 +32,8 @@ class Parser {
     while (!this.at("eof")) {
       this.skipNL();
       if (this.at("eof")) break;
-      if (this.at("def")) decls.push(this.parseFn());
+      if (this.at("extern")) decls.push(this.parsePython());
+      else if (this.at("def")) decls.push(this.parseFn());
       else if (this.at("struct")) decls.push(this.parseStruct());
       else {
         this.err(
@@ -46,6 +47,28 @@ class Parser {
     }
     const end = this.peek().span;
     return { decls, span: join(start, end) };
+  }
+
+  private parsePython(): PythonDecl {
+    const start = this.expect("extern").span;
+    this.expect("python");
+    const module = this.expect("string");
+    if (!/^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$/.test(module.value)) {
+      this.err("FER102", "expected a dotted Python module name", module.span);
+    }
+    this.expect("def");
+    const name = this.expect("ident");
+    this.expect("(");
+    const params: Param[] = [];
+    if (!this.at(")")) {
+      params.push(this.parseParam());
+      while (this.eat(",") && !this.at(")")) params.push(this.parseParam());
+    }
+    this.expect(")");
+    this.expect("->");
+    const returnType = this.parseType();
+    this.expect("newline");
+    return { kind: "python", module: module.value, name: name.value, params, returnType, span: join(start, returnType.span) };
   }
 
   private parseFn(): FnDecl {
@@ -88,6 +111,7 @@ class Parser {
     const name = this.expect("ident");
     this.expect(":");
     this.expect("newline");
+    this.skipNL();
     this.expect("indent");
     const fields: StructDecl["fields"] = [];
     while (!this.at("dedent") && !this.at("eof")) {
@@ -109,12 +133,17 @@ class Parser {
   private parseBlock(): Stmt[] {
     this.expect(":");
     this.expect("newline");
+    this.skipNL();
     this.expect("indent");
     const stmts: Stmt[] = [];
     while (!this.at("dedent") && !this.at("eof")) {
       this.skipNL();
       if (this.at("dedent") || this.at("eof")) break;
-      stmts.push(this.parseStmt());
+      const stmt = this.parseStmt();
+      stmts.push(stmt);
+      if (!["if", "while", "for"].includes(stmt.kind) && !this.at("newline", "dedent", "eof")) {
+        this.err("FER102", "expected newline after statement", this.peek().span);
+      }
       this.skipNL();
     }
     this.expect("dedent");
@@ -232,7 +261,7 @@ class Parser {
       const sizeTok = this.expect("int");
       const rbr = this.expect("]").span;
       const size = Number(sizeTok.value);
-      if (size < 0 || !Number.isInteger(size)) {
+      if (size < 0 || !Number.isSafeInteger(size) || size > 2147483647) {
         this.err("FER101", "array size must be a non-negative integer", sizeTok.span);
       }
       return { kind: "array", element, size, span: join(lbr, rbr) };
@@ -376,15 +405,12 @@ class Parser {
       return { kind: "name", name: t.value, span: t.span };
     }
     if (this.eat("(")) {
-      this.depth++;
       const inner = this.parseExpr();
-      this.depth--;
       this.expect(")");
       return inner;
     }
     if (this.eat("[")) {
       const start = this.prev().span;
-      this.depth++;
       const elements: Expr[] = [];
       this.skipNL();
       if (!this.at("]")) {
@@ -395,7 +421,6 @@ class Parser {
           elements.push(this.parseExpr());
         }
       }
-      this.depth--;
       const end = this.expect("]").span;
       return { kind: "array", elements, span: join(start, end) };
     }
@@ -404,7 +429,6 @@ class Parser {
 
   private parseStructLit(name: Token): Expr {
     this.expect("{");
-    this.depth++;
     const fields: { name: string; value: Expr; span: Span }[] = [];
     this.skipNL();
     if (!this.at("}")) {
@@ -419,7 +443,6 @@ class Parser {
         if (this.at("}")) break;
       }
     }
-    this.depth--;
     const end = this.expect("}").span;
     return { kind: "struct", name: name.value, fields, span: join(name.span, end) };
   }
@@ -430,10 +453,6 @@ class Parser {
 
   private at(...kinds: TokenKind[]): boolean {
     const k = this.peek().kind;
-    if (this.depth > 0 && k === "newline") {
-      this.bump();
-      return this.at(...kinds);
-    }
     return kinds.includes(k);
   }
 

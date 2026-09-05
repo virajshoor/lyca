@@ -82,7 +82,7 @@ No parameters. Return type `i32`. That integer is the process exit code (Unix: `
 def print(s: &string) -> i32
 ```
 
-Declared by the compiler, not in user source. It prints `s` plus a newline via libc `puts`. The return value is `0`.
+Declared by the compiler, not in user source. It writes the full UTF-8 byte sequence, including embedded NUL bytes, plus a newline via libc. It returns `0` on success and `-1` on an output error.
 
 If you pass a `string` where `&string` is expected, Ferra inserts a borrow. These are equivalent:
 
@@ -109,7 +109,7 @@ else:
     return 3
 ```
 
-`elif` is parsed as `else: if ...`. Comparisons do not chain: `0 < n < 10` is a type error because `(0 < n)` is `bool`.
+`elif` is parsed as `else: if ...`. Comparisons do not chain: `0 < n < 10` is rejected by the parser. Write `0 < n and n < 10`.
 
 ### while
 
@@ -121,7 +121,7 @@ while i < 10:
 
 ### for-range
 
-`for name in start..end:` iterates `i32` values in the half-open interval `[start, end)`. `name` is a mutable `i32` local for the loop body.
+`for name in start..end:` iterates `i32` values in the half-open interval `[start, end)`. `name` is an immutable `i32` local for the loop body. Both bounds are evaluated once in the enclosing scope.
 
 ```ferra
 let mut s: i32 = 0
@@ -170,7 +170,7 @@ a[0] = 8
 let x: i32 = a[1]
 ```
 
-The index expression must be `i32`. Length is part of the type: `[i32; 2]` is not `[i32; 3]`. No slices in v0.
+The index expression must be `i32`. Reads and writes check bounds; known invalid literal indices fail at compile time. Length is part of the type: `[i32; 2]` is not `[i32; 3]`. No slices in v0.
 
 ## Ownership in one page
 
@@ -212,3 +212,7 @@ def main() -> i32:
 ```
 
 `sum` takes `Pair` by value, so `p` is moved into the call. After `sum(p)`, `p` is dead.
+
+## Python declarations
+
+`extern python "module.path" def name(arg: T) -> T` declares a positional Python call with checked conversions. It has no body. See [Python compatibility](python-compatibility.md) for supported types and extension builds.

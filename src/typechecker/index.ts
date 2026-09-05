@@ -14,12 +14,15 @@ export type FerraType =
 
 export type StructInfo = { name: string; fields: { name: string; type: FerraType }[] };
 
-export type FnInfo = { name: string; params: { name: string; type: FerraType }[]; ret: FerraType };
+export type FnInfo = { name: string; params: { name: string; type: FerraType }[]; ret: FerraType; pythonModule?: string };
 
 export type CheckedProgram = {
   ast: Program;
   structs: Map<string, StructInfo>;
   fns: Map<string, FnInfo>;
+  exprTypes: Map<Expr, FerraType>;
+  types: Map<TypeAst, FerraType>;
+  target: "native" | "python";
 };
 
 const PRIMS = new Set(["i32", "i64", "f32", "f64", "bool", "string"]);
@@ -54,7 +57,8 @@ type VarInfo = {
   mut: boolean;
   state: "owned" | "moved";
   borrowCount: number;
-  borrowedFrom?: string;
+  borrowedFrom?: VarInfo;
+  loopDepth: number;
 };
 
 class Scope {
@@ -62,8 +66,8 @@ class Scope {
   order: string[] = [];
 }
 
-export function typecheck(ast: Program, source: string, filename: string): CheckedProgram {
-  return new Typechecker(ast, source, filename).run();
+export function typecheck(ast: Program, source: string, filename: string, target: "native" | "python" = "native"): CheckedProgram {
+  return new Typechecker(ast, source, filename, target).run();
 }
 
 class Typechecker {
@@ -71,12 +75,16 @@ class Typechecker {
   fns = new Map<string, FnInfo>();
   scopes: Scope[] = [];
   currentRet: FerraType | null = null;
-  stmtBorrows: string[] = [];
+  stmtBorrows: VarInfo[] = [];
+  exprTypes = new Map<Expr, FerraType>();
+  types = new Map<TypeAst, FerraType>();
+  loopDepth = 0;
 
   constructor(
     private ast: Program,
     private source: string,
     private filename: string,
+    private target: "native" | "python",
   ) {}
 
   run(): CheckedProgram {
@@ -100,6 +108,21 @@ class Typechecker {
       this.structs.set(d.name, { name: d.name, fields });
     }
 
+    // Reject infinite layouts before emitting LLVM types.
+    const visiting = new Set<string>();
+    const done = new Set<string>();
+    const visit = (t: FerraType): void => {
+      if (t.kind === "ref") this.err("FER224", "references cannot be stored in aggregates", this.ast.span);
+      if (t.kind === "array") visit(t.element);
+      if (t.kind !== "struct" || done.has(t.name)) return;
+      if (visiting.has(t.name)) this.err("FER228", "recursive value layout requires indirection", this.ast.span);
+      visiting.add(t.name);
+      for (const f of this.structs.get(t.name)!.fields) visit(f.type);
+      visiting.delete(t.name);
+      done.add(t.name);
+    };
+    for (const name of this.structs.keys()) visit({ kind: "struct", name });
+
     this.fns.set("print", {
       name: "print",
       params: [{ name: "s", type: { kind: "ref", inner: { kind: "string" } } }],
@@ -107,18 +130,34 @@ class Typechecker {
     });
 
     for (const d of this.ast.decls) {
-      if (d.kind !== "fn") continue;
+      if (d.kind !== "fn" && d.kind !== "python") continue;
       if (this.fns.has(d.name)) this.err("FER216", `duplicate definition of '${d.name}'`, d.span);
       this.fns.set(d.name, {
         name: d.name,
         params: d.params.map((p) => ({ name: p.name, type: this.resolve(p.type) })),
         ret: this.resolve(d.returnType),
+        pythonModule: d.kind === "python" ? d.module : undefined,
       });
     }
 
+    for (const d of this.ast.decls) {
+      if (d.kind === "struct") continue;
+      const fn = this.fns.get(d.name)!;
+      if (fn.ret.kind === "ref") this.err("FER224", "returning references is not supported", d.returnType.span);
+      if (d.kind === "python" || (this.target === "python" && !d.name.startsWith("_"))) {
+        for (const t of [...fn.params.map(p => p.type), fn.ret]) {
+          if (!pythonType(t)) this.err("FER229", "Python boundary requires scalars, strings, or fixed numeric arrays", d.span);
+        }
+      }
+      const names = new Set<string>();
+      for (const param of d.params) {
+        if (names.has(param.name)) this.err("FER216", `duplicate parameter '${param.name}'`, param.span);
+        names.add(param.name);
+      }
+    }
     const main = this.fns.get("main");
-    if (!main) this.err("FER214", "program must define 'main() -> i32'", this.ast.span, "add: def main() -> i32:");
-    if (main.params.length !== 0 || main.ret.kind !== "i32") {
+    if (this.target === "native" && (!main || main.pythonModule)) this.err("FER214", "program must define 'main() -> i32'", this.ast.span, "add: def main() -> i32:");
+    if (this.target === "native" && main && (main.params.length !== 0 || main.ret.kind !== "i32")) {
       const span = this.ast.decls.find((d) => d.kind === "fn" && d.name === "main")!.span;
       this.err("FER215", "main must be 'def main() -> i32'", span);
     }
@@ -126,16 +165,13 @@ class Typechecker {
     for (const d of this.ast.decls) {
       if (d.kind === "fn") this.checkFn(d);
     }
-    return { ast: this.ast, structs: this.structs, fns: this.fns };
+    return { ast: this.ast, structs: this.structs, fns: this.fns, exprTypes: this.exprTypes, types: this.types, target: this.target };
   }
 
   private checkFn(fn: FnDecl) {
     this.currentRet = this.fns.get(fn.name)!.ret;
     this.scopes = [new Scope()];
-    const seen = new Set<string>();
     for (const p of fn.params) {
-      if (seen.has(p.name)) this.err("FER216", `duplicate parameter '${p.name}'`, p.span);
-      seen.add(p.name);
       this.define(p.name, this.resolve(p.type), false, p.span);
     }
     this.checkBlock(fn.body);
@@ -147,7 +183,10 @@ class Typechecker {
 
   private checkBlock(stmts: Stmt[]) {
     this.scopes.push(new Scope());
-    for (const s of stmts) this.checkStmt(s);
+    for (const s of stmts) {
+      this.checkStmt(s);
+      if (alwaysReturns([s])) break;
+    }
     this.popScope();
   }
 
@@ -158,13 +197,12 @@ class Typechecker {
         const ty = this.resolve(stmt.type);
         const val = this.checkExpr(stmt.value, ty);
         this.expectType(val, ty, stmt.value.span);
+        // Resolve the owner before a new binding can shadow its name.
+        const from = ty.kind === "ref" ? this.borrowSource(stmt.value) : undefined;
         this.define(stmt.name, ty, stmt.mut, stmt.span);
-        if (ty.kind === "ref") {
-          const from = this.borrowSource(stmt.value);
-          if (from) {
-            this.lookup(stmt.name)!.borrowedFrom = from;
-            this.stmtBorrows = this.stmtBorrows.filter((n) => n !== from);
-          }
+        if (from) {
+          this.lookup(stmt.name)!.borrowedFrom = from;
+          from.borrowCount++;
         }
         break;
       }
@@ -181,15 +219,35 @@ class Typechecker {
         const c = this.checkExpr(stmt.cond, { kind: "bool" });
         this.expectType(c, { kind: "bool" }, stmt.cond.span, "FER226");
         this.releaseStmtBorrows();
+        const before = this.snapshot();
+        if (before.size === 0) {
+          this.checkBlock(stmt.then);
+          if (stmt.else_) this.checkBlock(stmt.else_);
+          return;
+        }
         this.checkBlock(stmt.then);
+        const thenState = this.snapshot();
+        this.restore(before);
         if (stmt.else_) this.checkBlock(stmt.else_);
+        const elseState = this.snapshot();
+        const paths = [];
+        if (!alwaysReturns(stmt.then)) paths.push(thenState);
+        if (!stmt.else_ || !alwaysReturns(stmt.else_)) paths.push(elseState);
+        this.restore(before);
+        for (const [v] of before) {
+          v.state = paths.some(path => path.get(v) === "moved") ? "moved" : (paths[0]?.get(v) ?? v.state);
+        }
         return;
       }
       case "while": {
+        const before = this.snapshot();
+        this.loopDepth++;
         const c = this.checkExpr(stmt.cond, { kind: "bool" });
         this.expectType(c, { kind: "bool" }, stmt.cond.span, "FER227");
         this.releaseStmtBorrows();
         this.checkBlock(stmt.body);
+        this.loopDepth--;
+        this.restore(before);
         return;
       }
       case "for": {
@@ -198,10 +256,17 @@ class Typechecker {
         this.expectType(s, { kind: "i32" }, stmt.start.span);
         this.expectType(e, { kind: "i32" }, stmt.end.span);
         this.releaseStmtBorrows();
+        const before = this.snapshot();
+        this.loopDepth++;
         this.scopes.push(new Scope());
-        this.define(stmt.name, { kind: "i32" }, true, stmt.span);
-        for (const b of stmt.body) this.checkStmt(b);
+        this.define(stmt.name, { kind: "i32" }, false, stmt.span);
+        for (const b of stmt.body) {
+          this.checkStmt(b);
+          if (alwaysReturns([b])) break;
+        }
         this.popScope();
+        this.loopDepth--;
+        this.restore(before);
         return;
       }
       case "expr":
@@ -222,9 +287,7 @@ class Typechecker {
       this.dropRef(v);
       v.state = "owned";
       v.borrowCount = 0;
-      if (v.type.kind === "ref" && value.kind === "borrow" && value.expr.kind === "name") {
-        v.borrowedFrom = value.expr.name;
-      }
+
       return;
     }
     if (target.kind === "index") {
@@ -232,8 +295,10 @@ class Typechecker {
       if (t.kind !== "array") this.err("FER212", `cannot index '${typeName(t)}'`, target.target.span);
       const i = this.checkExpr(target.index, { kind: "i32" });
       this.expectType(i, { kind: "i32" }, target.index.span);
+      this.checkIndex(target.index, t.size);
       const val = this.checkExpr(value, t.element);
       this.expectType(val, t.element, value.span);
+      this.requireLiveRoot(target);
       return;
     }
     if (target.kind === "field") {
@@ -244,26 +309,32 @@ class Typechecker {
       if (!f) this.err("FER209", `no field '${target.name}' on ${t.name}`, target.span);
       const val = this.checkExpr(value, f.type);
       this.expectType(val, f.type, value.span);
+      this.requireLiveRoot(target);
       return;
     }
     this.err("FER105", "invalid assignment target", target.span);
   }
 
   private checkExpr(expr: Expr, expected: FerraType | null): FerraType {
+    const ty = this.inferExpr(expr, expected);
+    this.exprTypes.set(expr, ty);
+    return ty;
+  }
+
+  private inferExpr(expr: Expr, expected: FerraType | null): FerraType {
     switch (expr.kind) {
       case "int": {
         const ty =
           expected?.kind === "i32" || expected?.kind === "i64" ? expected : { kind: "i32" as const };
-        if (ty.kind === "i32") {
-          const n = Number(expr.raw);
-          if (n > 2147483647) {
-            this.err("FER201", "integer literal does not fit in i32", expr.span, "annotate as i64: let x: i64 = ...");
-          }
-        }
+        const overflow = ty.kind === "i64" ? BigInt(expr.raw) > 9223372036854775807n : Number(expr.raw) > 2147483647;
+        if (overflow) this.err("FER201", `integer literal does not fit in ${ty.kind}`, expr.span);
         return ty;
       }
       case "float": {
-        return expected?.kind === "f32" || expected?.kind === "f64" ? expected : { kind: "f64" };
+        const ty: FerraType = expected?.kind === "f32" ? expected : { kind: "f64" };
+        const n = Number(expr.raw);
+        if (!Number.isFinite(ty.kind === "f32" ? Math.fround(n) : n)) this.err("FER201", "float literal out of range", expr.span);
+        return ty;
       }
       case "bool":
         return { kind: "bool" };
@@ -272,6 +343,13 @@ class Typechecker {
       case "name":
         return this.useVar(expr.name, expr.span, expected);
       case "unary": {
+        if (expr.op === "-" && expr.expr.kind === "int") {
+          const ty: FerraType = expected?.kind === "i64" ? expected : { kind: "i32" };
+          const max = ty.kind === "i64" ? 9223372036854775808n : 2147483648n;
+          if (BigInt(expr.expr.raw) > max) this.err("FER201", `integer literal does not fit in ${ty.kind}`, expr.span);
+          this.exprTypes.set(expr.expr, ty);
+          return ty;
+        }
         if (expr.op === "not") {
           const t = this.checkExpr(expr.expr, { kind: "bool" });
           this.expectType(t, { kind: "bool" }, expr.expr.span);
@@ -289,8 +367,9 @@ class Typechecker {
         }
         const v = this.requireVar(expr.expr.name, expr.expr.span);
         if (v.state === "moved") this.err("FER223", `cannot borrow '${expr.expr.name}' after it was moved`, expr.span);
+        if (v.type.kind === "ref") this.err("FER224", "nested references are not supported", expr.span);
         v.borrowCount++;
-        this.stmtBorrows.push(expr.expr.name);
+        this.stmtBorrows.push(v);
         return { kind: "ref", inner: v.type };
       }
       case "binary":
@@ -302,6 +381,7 @@ class Typechecker {
         if (t.kind !== "array") this.err("FER212", `cannot index '${typeName(t)}'`, expr.target.span);
         const i = this.checkExpr(expr.index, { kind: "i32" });
         this.expectType(i, { kind: "i32" }, expr.index.span);
+        this.checkIndex(expr.index, t.size);
         if (!isCopy(t.element)) this.movePlace(expr.target, expr.span);
         return t.element;
       }
@@ -376,7 +456,7 @@ class Typechecker {
         this.err("FER225", `cannot order bool values with '${op}'`, expr.span);
       }
       if (l.kind === "string" || l.kind === "array" || l.kind === "struct" || l.kind === "ref") {
-        if (op !== "==" && op !== "!=") this.err("FER225", `cannot compare '${typeName(l)}' with '${op}'`, expr.span);
+        this.err("FER225", `cannot compare '${typeName(l)}' with '${op}'`, expr.span);
       }
       return { kind: "bool" };
     }
@@ -404,7 +484,7 @@ class Typechecker {
         if (v.state === "moved") this.err("FER223", `cannot borrow '${arg.name}' after it was moved`, arg.span);
         if (sameType(v.type, param.inner)) {
           v.borrowCount++;
-          this.stmtBorrows.push(arg.name);
+          this.stmtBorrows.push(v);
           actual = param;
         } else {
           actual = this.checkExpr(arg, param);
@@ -428,34 +508,50 @@ class Typechecker {
     const ty = v.type;
     if (expected?.kind === "ref" && sameType(ty, expected.inner)) {
       v.borrowCount++;
-      this.stmtBorrows.push(name);
+      this.stmtBorrows.push(v);
       return expected;
     }
     if (!isCopy(ty)) {
       if (v.borrowCount > 0) this.err("FER219", `cannot move '${name}' while it is borrowed`, span);
+      this.checkLoopMove(v, span);
       v.state = "moved";
     }
     return ty;
   }
 
   private resolve(t: TypeAst): FerraType {
+    const cached = this.types.get(t);
+    if (cached) return cached;
+    const ty = this.resolveType(t);
+    this.types.set(t, ty);
+    return ty;
+  }
+
+  private resolveType(t: TypeAst): FerraType {
     switch (t.kind) {
       case "named":
         if (PRIMS.has(t.name)) return { kind: t.name as "i32" };
         if (this.structs.has(t.name)) return { kind: "struct", name: t.name };
         this.err("FER202", `unknown type '${t.name}'`, t.span);
         break;
-      case "array":
-        return { kind: "array", element: this.resolve(t.element), size: t.size };
-      case "ref":
-        return { kind: "ref", inner: this.resolve(t.inner) };
+      case "array": {
+        const element = this.resolve(t.element);
+        if (element.kind === "ref") this.err("FER224", "arrays cannot contain references", t.span);
+        return { kind: "array", element, size: t.size };
+      }
+      case "ref": {
+        const inner = this.resolve(t.inner);
+        if (inner.kind === "ref") this.err("FER224", "nested references are not supported", t.span);
+        return { kind: "ref", inner };
+      }
     }
   }
 
   private define(name: string, type: FerraType, mut: boolean, span: Span) {
     const cur = this.scopes[this.scopes.length - 1]!;
     if (cur.vars.has(name)) this.err("FER216", `duplicate variable '${name}'`, span);
-    cur.vars.set(name, { type, mut, state: "owned", borrowCount: 0 });
+    if (type.kind === "ref" && mut) this.err("FER224", "reference bindings must be immutable", span);
+    cur.vars.set(name, { type, mut, state: "owned", borrowCount: 0, loopDepth: this.loopDepth });
     cur.order.push(name);
   }
 
@@ -482,23 +578,28 @@ class Typechecker {
 
   private dropRef(v: VarInfo) {
     if (v.borrowedFrom) {
-      const src = this.lookup(v.borrowedFrom);
+      const src = v.borrowedFrom;
       if (src && src.borrowCount > 0) src.borrowCount--;
       v.borrowedFrom = undefined;
     }
   }
 
   private releaseStmtBorrows() {
-    for (const name of this.stmtBorrows) {
-      const v = this.lookup(name);
+    for (const v of this.stmtBorrows) {
       if (v && v.borrowCount > 0) v.borrowCount--;
     }
     this.stmtBorrows = [];
   }
 
+  private requireLiveRoot(expr: Expr): void {
+    if (expr.kind === "field" || expr.kind === "index") return this.requireLiveRoot(expr.target);
+    if (expr.kind === "name") this.checkPlace(expr);
+  }
+
   private requireMutPlace(expr: Expr) {
     if (expr.kind === "name") {
       const v = this.requireVar(expr.name, expr.span);
+      if (v.type.kind === "ref") this.err("FER224", "cannot mutate through a shared reference", expr.span);
       if (!v.mut) this.err("FER217", `cannot assign to immutable '${expr.name}'`, expr.span, "declare with 'let mut'");
       if (v.borrowCount > 0) this.err("FER220", `cannot mutate '${expr.name}' while it is borrowed`, expr.span);
       return;
@@ -507,9 +608,16 @@ class Typechecker {
       this.requireMutPlace(expr.target);
       return;
     }
+    this.err("FER105", "assignment requires an owned mutable variable", expr.span);
   }
 
   private checkPlace(expr: Expr): FerraType {
+    const ty = this.inferPlace(expr);
+    this.exprTypes.set(expr, ty);
+    return ty;
+  }
+
+  private inferPlace(expr: Expr): FerraType {
     if (expr.kind === "name") {
       const v = this.requireVar(expr.name, expr.span);
       if (v.state === "moved") {
@@ -530,28 +638,52 @@ class Typechecker {
       if (t.kind !== "array") this.err("FER212", `cannot index '${typeName(t)}'`, expr.target.span);
       const i = this.checkExpr(expr.index, { kind: "i32" });
       this.expectType(i, { kind: "i32" }, expr.index.span);
+      this.checkIndex(expr.index, t.size);
       return t.element;
     }
     return this.checkExpr(expr, null);
   }
 
-  private movePlace(expr: Expr, span: Span) {
+  private movePlace(expr: Expr, span: Span): void {
+    if (expr.kind === "field" || expr.kind === "index") return this.movePlace(expr.target, span);
     if (expr.kind === "name") {
       const v = this.requireVar(expr.name, expr.span);
+      if (v.type.kind === "ref") this.err("FER224", "cannot move a non-Copy value through a reference", span);
       if (v.borrowCount > 0) this.err("FER219", `cannot move '${expr.name}' while it is borrowed`, span);
-      if (!isCopy(v.type)) v.state = "moved";
+      this.checkLoopMove(v, span);
+      v.state = "moved";
     }
   }
 
-  private borrowSource(expr: Expr): string | undefined {
-    if (expr.kind === "borrow" && expr.expr.kind === "name") return expr.expr.name;
+  private borrowSource(expr: Expr): VarInfo | undefined {
+    if (expr.kind === "borrow" && expr.expr.kind === "name") return this.lookup(expr.expr.name);
     if (expr.kind === "name") {
       const v = this.lookup(expr.name);
-      if (!v) return undefined;
-      if (v.borrowedFrom) return v.borrowedFrom;
-      if (v.type.kind !== "ref") return expr.name;
+      return v?.type.kind === "ref" ? v.borrowedFrom : v;
     }
     return undefined;
+  }
+
+  private checkLoopMove(v: VarInfo, span: Span) {
+    // ponytail: conservative loops; use fixed-point dataflow if loop-carried moves are needed.
+    if (v.loopDepth < this.loopDepth) this.err("FER230", "cannot move an outer value in a loop", span, "borrow it instead, or create the value inside the loop");
+  }
+
+  private snapshot() {
+    const state = new Map<VarInfo, "owned" | "moved">();
+    for (const scope of this.scopes) for (const v of scope.vars.values()) {
+      if (!isCopy(v.type)) state.set(v, v.state);
+    }
+    return state;
+  }
+
+  private restore(state: Map<VarInfo, "owned" | "moved">) {
+    for (const [v, owned] of state) v.state = owned;
+  }
+
+  private checkIndex(expr: Expr, size: number) {
+    const n = expr.kind === "int" ? BigInt(expr.raw) : expr.kind === "unary" && expr.op === "-" && expr.expr.kind === "int" ? -BigInt(expr.expr.raw) : null;
+    if (n !== null && (n < 0n || n >= BigInt(size))) this.err("FER231", "array index out of bounds", expr.span);
   }
 
   private deref(t: FerraType): FerraType {
@@ -575,4 +707,10 @@ function alwaysReturns(stmts: Stmt[]): boolean {
     if (s.kind === "if" && alwaysReturns(s.then) && s.else_ && alwaysReturns(s.else_)) return true;
   }
   return false;
+}
+
+export function pythonType(t: FerraType): boolean {
+  if (t.kind === "ref") return t.inner.kind !== "ref" && pythonType(t.inner);
+  if (t.kind === "array") return ["i32", "i64", "f32", "f64", "bool"].includes(t.element.kind);
+  return t.kind !== "struct";
 }

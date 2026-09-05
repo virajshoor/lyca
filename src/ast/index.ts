@@ -66,6 +66,15 @@ export type StructDecl = {
   span: Span;
 };
 
-export type Decl = FnDecl | StructDecl;
+export type PythonDecl = {
+  kind: "python";
+  module: string;
+  name: string;
+  params: Param[];
+  returnType: TypeAst;
+  span: Span;
+};
+
+export type Decl = FnDecl | StructDecl | PythonDecl;
 
 export type Program = { decls: Decl[]; span: Span };

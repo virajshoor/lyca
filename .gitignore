@@ -10,3 +10,8 @@ build/
 coverage/
 *.tsbuildinfo
 graphify-out/
+
+*.so
+*.so.c
+__pycache__/
+.ferra-*/

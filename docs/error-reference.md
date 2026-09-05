@@ -257,10 +257,34 @@ Same as FER226 for `while`.
 
 ### FER301 — clang failed / internal error
 
-`clang` returned non-zero on the generated `.ll`, or the compiler hit a missing local during IR emission.
+`clang` could not be launched, returned non-zero on the generated `.ll`, or the compiler hit a missing local during IR emission.
 
 Fix: install `clang` and confirm `clang -v` works. If the message is `internal compiler error`, that is a compiler bug; the `.ll` path in the message (when clang failed) is worth inspecting.
 
 ---
 
-Codes not used in v0 (reserved): `FER103`, `FER204`, `FER224`.
+### FER224 — unsupported reference operation
+
+Returning a reference, mutable reference bindings, nested references, aggregate reference storage, mutation through a shared reference, or moving a non-Copy value through a reference. Use owned return values and immutable local borrows.
+
+### FER228 — recursive value layout
+
+A struct contains itself, directly or through other structs/arrays. Heap indirection is not implemented; use a nonrecursive representation.
+
+### FER229 — unsupported Python boundary type
+
+Public extension functions and Python declarations accept scalars, strings, or fixed arrays of numeric/bool elements, optionally borrowed as parameters. Structs and nested arrays are internal-only. Prefix an internal helper's name with `_`, or expose supported arguments.
+
+### FER230 — loop-carried move
+
+A loop tries to move a binding created outside that loop. Borrow it, or construct an owned value inside each iteration.
+
+### FER231 — constant index out of bounds
+
+A literal index is negative or outside the array length. Dynamic indices are checked at runtime and raise an error before memory access.
+
+Codes not used in v0 (reserved): `FER103`, `FER204`.
+
+## Runtime failures
+
+Bounds failures raise `IndexError` through a Python extension. Invalid signed integer division/remainder raises `ArithmeticError`. Native programs print the source line number and exit 1. Python import/call/conversion errors preserve the original Python exception; embedded executables print it and exit 1.
