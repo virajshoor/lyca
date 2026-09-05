@@ -20,8 +20,8 @@ Milliseconds, lower is better:
 
 | Workload | Before, default O0 | After, default O2 | Matching C O2 |
 |---|---:|---:|---:|
-| Recursive Fibonacci, n=34 | 27.96 | 20.89 | 20.61 |
-| 20 million integer recurrence steps | 28.24 | 22.53 | 22.28 |
+| Recursive Fibonacci, n=34 | 27.96 | 20.70 | 20.33 |
+| 20 million integer recurrence steps | 28.24 | 23.38 | 22.60 |
 
 The new defaults reduced elapsed time about 25% and 20% in these two workloads. Lyca and C are close here; this is not evidence for a universal “C-like performance” guarantee. These tests do not cover I/O, real applications, large arrays, or Python-boundary copying. Checksums and matching fixed-width arithmetic keep the compared work equivalent.
 
@@ -41,9 +41,9 @@ Treat sub-millisecond results as noisy. Do not compare a lexer improvement with 
 
 ## Python boundary
 
-The measured scalar addition cost was about **391 ns through Lyca**, versus **57 ns for a small Python function**, including benchmark-loop and lambda overhead. Calling Python `math.sqrt` through Lyca cost about **694 ns**, versus **49 ns directly**. Going through the bridge for tiny Python operations loses time.
+The measured scalar addition cost was about **396 ns through Lyca**, versus **57 ns for a small Python function**, including benchmark-loop and lambda overhead. Calling Python `math.sqrt` through Lyca cost about **724 ns**, versus **51 ns directly**. Going through the bridge for tiny Python operations loses time.
 
-A batched 100,000-step integer recurrence took about **94 μs in Lyca** versus **7.55 ms in Python**, roughly 81× on this one workload. Keep loops and numerical work inside a native function; cross the boundary once per batch. This is not a NumPy comparison or a claim that all Python code gets that speedup.
+A batched 100,000-step integer recurrence took about **94 μs in Lyca** versus **7.61 ms in Python**, roughly 81× on this one workload. Keep loops and numerical work inside a native function; cross the boundary once per batch. This is not a NumPy comparison or a claim that all Python code gets that speedup.
 
 Arrays copy at the boundary. The GIL stays held. Python-derived strings are freed at the end of the outer call, so long calls can retain substantial temporary string memory. No zero-copy, concurrent-kernel, or bounded-string-memory performance claim is made.
 
