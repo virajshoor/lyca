@@ -1,24 +1,26 @@
-# Ferra
+# Lyca
 
 **Python-like syntax. Explicit types. Native LLVM output.**
+
+Created by **Viraj Shoor**.
 
 [![CI](https://github.com/virajshoor/lyca/actions/workflows/ci.yml/badge.svg)](https://github.com/virajshoor/lyca/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-TypeScript-3178C6)](https://www.typescriptlang.org/)
 
-## Why Ferra
+## Why Lyca
 
-Ferra is an experimental, statically typed language with indentation, `def`, `if`, `for`, and `return`. It compiles through LLVM IR and clang. Native builds use `-O2` by default; `--opt 0` trades runtime optimization for shorter builds. Performance depends on the program: see [measured results and methodology](docs/performance.md).
+Lyca is an experimental, statically typed language with indentation, `def`, `if`, `for`, and `return`. It compiles through LLVM IR and clang. Native builds use `-O2` by default; `--opt 0` trades runtime optimization for shorter builds. Performance depends on the program: see [measured results and methodology](docs/performance.md).
 
 The native core has no garbage collector: arrays and structs use stack storage, and literals use static storage. Shared references use pointers, with conservative lexical ownership checks. This is a small v0 model, not a complete Rust lifetime system or a claim of proven memory safety.
 
-Optional CPython integration works in both directions: Python can import compiled Ferra functions, and Ferra can call typed Python functions. Python-linked programs retain CPython's runtime, reference counting, garbage collection, and GIL. Python modules run under Python; they are not compiled into native Ferra code.
+Optional CPython integration works in both directions: Python can import compiled Lyca functions, and Lyca can call typed Python functions. Python-linked programs retain CPython's runtime, reference counting, garbage collection, and GIL. Python modules run under Python; they are not compiled into native Lyca code.
 
 ## Example
 
-Fibonacci in Ferra, compiled to LLVM IR (simplified):
+Fibonacci in Lyca, compiled to LLVM IR (simplified):
 
-```ferra
+```lyca
 def fib(n: i32) -> i32:
     if n <= 1:
         return n
@@ -61,9 +63,9 @@ npm test
 
 ## Hello World
 
-Write `hello.fe`:
+Write `hello.lyca`:
 
-```ferra
+```lyca
 def main() -> i32:
     print("Hello, World!")
     return 0
@@ -72,7 +74,7 @@ def main() -> i32:
 Compile, run, check output:
 
 ```bash
-node dist/cli/index.js build hello.fe -o hello
+node dist/cli/index.js build hello.lyca -o hello
 ./hello
 ```
 
@@ -83,7 +85,7 @@ Hello, World!
 The same command works for the bundled examples:
 
 ```bash
-node dist/cli/index.js build examples/fib.fe -o /tmp/fib
+node dist/cli/index.js build examples/fib.lyca -o /tmp/fib
 /tmp/fib; echo $?
 # 55
 ```
@@ -93,13 +95,13 @@ node dist/cli/index.js build examples/fib.fe -o /tmp/fib
 Export a file's public functions (names without a leading `_`):
 
 ```bash
-node dist/cli/index.js build examples/python-module.fe --target python -o build/kernels
+node dist/cli/index.js build examples/python-module.lyca --target python -o build/kernels
 PYTHONPATH=build python3 -c 'import kernels; print(kernels.add(20, 22))'
 ```
 
 Call an installed Python module from a native executable:
 
-```ferra
+```lyca
 extern python "math" def sqrt(x: f64) -> f64
 
 def main() -> i32:
@@ -145,7 +147,7 @@ src/
   ast/            AST node types
   typechecker/    Types + ownership
   codegen/        LLVM IR emitter
-  cli/            ferra build file.fe -o out
+  cli/            lyca build file.lyca -o out
   runtime/        Small native/Python C support
   python.ts       CPython configuration and wrapper generation
   compile.ts      Pipeline driver
@@ -157,12 +159,18 @@ docs/
   compiler-architecture.md
   error-reference.md
 examples/
-  hello.fe
-  fib.fe
+  hello.lyca
+  fib.lyca
 tests/
 ```
 
 ## Documentation
+
+- [Prompt for AI models](prompt.md) — self-contained language brief
+- [Cheatsheet](docs/cheatsheet.md) — syntax and operators
+- [Cookbook](docs/cookbook.md) — complete example programs
+- [FAQ](docs/faq.md) — common questions
+- [Coding in Lyca (PDF)](docs/book/coding-in-lyca.pdf) — tutorial by Viraj Shoor
 
 - [Python compatibility](docs/python-compatibility.md) — supported values, environments, exceptions, costs
 - [Performance](docs/performance.md) — compiler/runtime benchmarks and limits
@@ -171,10 +179,10 @@ tests/
 - [Language tour](docs/language-tour.md) — syntax, types, control flow, functions
 - [Type system](docs/type-system.md) — ownership, what is allowed and why
 - [Compiler architecture](docs/compiler-architecture.md) — internals for contributors
-- [Error reference](docs/error-reference.md) — every `FERnnn` code
+- [Error reference](docs/error-reference.md) — every `LYCnnn` code
 
 ## License
 
-MIT © Ferra Contributors. See [LICENSE](LICENSE).
+MIT © Viraj Shoor. See [LICENSE](LICENSE).
 
 Bug reports and small patches are welcome. Read the language tour and error reference before sending a change; tests live in `tests/` and should cover both a valid program and the diagnostic you care about.

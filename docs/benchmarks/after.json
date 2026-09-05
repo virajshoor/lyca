@@ -105,7 +105,7 @@
     {
       "name": "recursion",
       "checksum": 167,
-      "ferra": [
+      "lyca": [
         {
           "opt": 0,
           "build": {
@@ -152,7 +152,7 @@
     {
       "name": "integer_loop",
       "checksum": 64,
-      "ferra": [
+      "lyca": [
         {
           "opt": 0,
           "build": {

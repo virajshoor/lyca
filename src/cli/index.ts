@@ -3,11 +3,11 @@ import { parseArgs } from "node:util";
 import { CompileError, CompileOptions, compileFile } from "../compile";
 
 function help(): string {
-  return `Ferra compiler
+  return `Lyca compiler
 
 Usage:
-  ferra build <file.fe> -o <output> [--opt 0|1|2|3]
-  ferra build <file.fe> -o <output-stem> --target python [--module NAME] [--python PATH]
+  lyca build <file.lyca> -o <output> [--opt 0|1|2|3]
+  lyca build <file.lyca> -o <output-stem> --target python [--module NAME] [--python PATH]
 
 Options:
   -o, --output   Native output path or Python extension path without suffix
@@ -38,7 +38,7 @@ function main(): void {
       process.exitCode = values.help ? 0 : 1;
       return;
     }
-    if (positionals.length !== 2 || positionals[0] !== "build" || !values.output) throw new Error("expected ferra build <file.fe> -o <output>");
+    if (positionals.length !== 2 || positionals[0] !== "build" || !values.output) throw new Error("expected lyca build <file.lyca> -o <output>");
     if (!/^[0-3]$/.test(values.opt!)) throw new Error("--opt must be 0, 1, 2, or 3");
     if (values.target !== "native" && values.target !== "python") throw new Error("--target must be native or python");
     const output = compileFile(positionals[1]!, values.output, {

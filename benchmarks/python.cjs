@@ -3,10 +3,10 @@ const { spawnSync } = require("node:child_process");
 const { join } = require("node:path");
 const { tmpdir } = require("node:os");
 const { compileFile } = require("../dist/compile");
-const python = process.env.FERRA_PYTHON || "python3";
-const dir = mkdtempSync(join(tmpdir(), "ferra-pybench-"));
+const python = process.env.LYCA_PYTHON || "python3";
+const dir = mkdtempSync(join(tmpdir(), "lyca-pybench-"));
 try {
-  const file = join(dir, "kernels.fe");
+  const file = join(dir, "kernels.lyca");
   writeFileSync(file, `extern python "math" def sqrt(x: f64) -> f64
 
 def add(x: i32, y: i32) -> i32:
@@ -45,11 +45,11 @@ assert kernels.mix(100000) == mix(100000)
 assert kernels.root(81.0) == 9.0
 report = dict(python=sys.version, platform=platform.platform(), methodology='3 warmups, 11 samples; Python loop and lambda overhead included; scalar calls and batched work reported separately',
     python_add=measure(lambda: add(1,2), 100000),
-    ferra_add=measure(lambda: kernels.add(1,2), 100000),
+    lyca_add=measure(lambda: kernels.add(1,2), 100000),
     python_sqrt=measure(lambda: math.sqrt(81.0), 100000),
-    ferra_calls_python_sqrt=measure(lambda: kernels.root(81.0), 100000),
+    lyca_calls_python_sqrt=measure(lambda: kernels.root(81.0), 100000),
     python_mix=measure(lambda: mix(100000), 1),
-    ferra_mix=measure(lambda: kernels.mix(100000), 1))
+    lyca_mix=measure(lambda: kernels.mix(100000), 1))
 print(json.dumps(report, indent=2))
 `;
   const r = spawnSync(python, ["-c", script], { cwd: dir, encoding: "utf8", timeout: 120000 });

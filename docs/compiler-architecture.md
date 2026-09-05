@@ -3,7 +3,7 @@
 The compiler is TypeScript running on Node.js. It emits textual LLVM IR and invokes clang. There is no native Node LLVM addon and no custom optimizer.
 
 ```text
-.fe source → lexer → AST → type/ownership checks → LLVM IR → clang → artifact
+.lyca source → lexer → AST → type/ownership checks → LLVM IR → clang → artifact
                                            ↘ optional C Python wrappers ↗
 ```
 
@@ -11,7 +11,7 @@ The compiler is TypeScript running on Node.js. It emits textual LLVM IR and invo
 
 The lexer emits indentation tokens only outside brackets. Continuation lines and comments do not create nested blocks. Operator tables are reused; identifier scanning uses character comparisons. The recursive-descent parser consumes normalized tokens without a second bracket-depth state machine. Simple statements require separators.
 
-The type checker collects signatures before checking bodies, so recursion works. It stores checked expression types and resolved annotations alongside the AST. Codegen uses that metadata; it does not reconstruct Ferra types from LLVM strings or guess a struct from declaration order.
+The type checker collects signatures before checking bodies, so recursion works. It stores checked expression types and resolved annotations alongside the AST. Codegen uses that metadata; it does not reconstruct Lyca types from LLVM strings or guess a struct from declaration order.
 
 Each lexical binding has its own ownership record. Loans refer to that record, not a variable's spelling. Branches check against independent incoming move states and merge only paths that continue. Copy-only scopes avoid unnecessary move-state merging. Loops conservatively reject moves of outer values. References cannot escape through returns or aggregates; reference bindings and range variables are immutable.
 
@@ -41,6 +41,6 @@ Generated functions pass an opaque context pointer. Core native builds use null 
 
 `compileSource(source, filename, options?)` returns checked textual IR. `compileFile(path, output, options?)` returns the actual artifact path. Options select native/Python target, optimization level, interpreter, and import name. Existing two-argument calls remain valid.
 
-The build copies C runtime assets into `dist/runtime`. `compileFile` stages compilation next to the destination and publishes the executable only after clang succeeds. Missing tools, unsupported environments, and clang failures become `FER301` diagnostics. An existing executable survives failed compilation.
+The build copies C runtime assets into `dist/runtime`. `compileFile` stages compilation next to the destination and publishes the executable only after clang succeeds. Missing tools, unsupported environments, and clang failures become `LYC301` diagnostics. An existing executable survives failed compilation.
 
 Tests exercise parsing, ownership diagnostics, emitted allocation placement, native execution at O0/O2, Python conversion, exception propagation, embedded Python, and failed-build preservation. Benchmarks separately report frontend stages, full source-to-IR time, build latency, native runtime, and Python call overhead. Performance numbers are reports, not noisy CI pass/fail thresholds.

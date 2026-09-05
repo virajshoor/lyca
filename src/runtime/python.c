@@ -8,22 +8,22 @@
 #include <float.h>
 #include <setjmp.h>
 
-typedef struct { const char *data; int64_t length; } FerraString;
-typedef struct FerraAllocation { struct FerraAllocation *next; char data[]; } FerraAllocation;
-typedef struct { jmp_buf jump; FerraAllocation *allocations; } FerraContext;
+typedef struct { const char *data; int64_t length; } LycaString;
+typedef struct LycaAllocation { struct LycaAllocation *next; char data[]; } LycaAllocation;
+typedef struct { jmp_buf jump; LycaAllocation *allocations; } LycaContext;
 
-static void ferra_destroy(FerraContext *ctx) {
+static void lyca_destroy(LycaContext *ctx) {
     while (ctx->allocations) {
-        FerraAllocation *next = ctx->allocations->next;
+        LycaAllocation *next = ctx->allocations->next;
         free(ctx->allocations);
         ctx->allocations = next;
     }
     free(ctx);
 }
 
-static void *ferra_allocate(FerraContext *ctx, size_t size) {
-    if (size > SIZE_MAX - sizeof(FerraAllocation)) { PyErr_NoMemory(); return NULL; }
-    FerraAllocation *p = malloc(sizeof(FerraAllocation) + size);
+static void *lyca_allocate(LycaContext *ctx, size_t size) {
+    if (size > SIZE_MAX - sizeof(LycaAllocation)) { PyErr_NoMemory(); return NULL; }
+    LycaAllocation *p = malloc(sizeof(LycaAllocation) + size);
     if (!p) { PyErr_NoMemory(); return NULL; }
     p->next = ctx->allocations;
     ctx->allocations = p;
@@ -31,31 +31,31 @@ static void *ferra_allocate(FerraContext *ctx, size_t size) {
     return p->data;
 }
 
-_Noreturn void ferra_fail(void *context, int32_t code, int32_t line) {
+_Noreturn void lyca_fail(void *context, int32_t code, int32_t line) {
     PyErr_Format(code == 1 ? PyExc_IndexError : PyExc_ArithmeticError,
-                 "Ferra runtime error at line %d: %s", line,
+                 "Lyca runtime error at line %d: %s", line,
                  code == 1 ? "array index out of bounds" : "invalid integer division or remainder");
-    longjmp(((FerraContext *)context)->jump, 1);
+    longjmp(((LycaContext *)context)->jump, 1);
 }
 
-int32_t ferra_print(const FerraString *s) {
+int32_t lyca_print(const LycaString *s) {
     if (fwrite(s->data, 1, (size_t)s->length, stdout) != (size_t)s->length) return -1;
     return fputc('\n', stdout) == EOF ? -1 : 0;
 }
 
-static size_t ferra_size(int kind) {
+static size_t lyca_size(int kind) {
     switch (kind) {
         case 1: return sizeof(int32_t);
         case 2: return sizeof(int64_t);
         case 3: return sizeof(float);
         case 4: return sizeof(double);
         case 5: return sizeof(uint8_t);
-        default: return sizeof(FerraString);
+        default: return sizeof(LycaString);
     }
 }
 
 // count == -1 is a scalar; nonnegative count is a fixed array copied at the boundary.
-static int ferra_from_python(FerraContext *ctx, PyObject *value, void *out, int kind, Py_ssize_t count) {
+static int lyca_from_python(LycaContext *ctx, PyObject *value, void *out, int kind, Py_ssize_t count) {
     if (count >= 0) {
         PyObject *seq = PySequence_Fast(value, "expected a numeric sequence");
         if (!seq) return -1;
@@ -65,7 +65,7 @@ static int ferra_from_python(FerraContext *ctx, PyObject *value, void *out, int 
             return -1;
         }
         for (Py_ssize_t i = 0; i < count; i++) {
-            if (ferra_from_python(ctx, PySequence_Fast_GET_ITEM(seq, i), (char *)out + (size_t)i * ferra_size(kind), kind, -1) < 0) {
+            if (lyca_from_python(ctx, PySequence_Fast_GET_ITEM(seq, i), (char *)out + (size_t)i * lyca_size(kind), kind, -1) < 0) {
                 Py_DECREF(seq);
                 return -1;
             }
@@ -99,21 +99,21 @@ static int ferra_from_python(FerraContext *ctx, PyObject *value, void *out, int 
         Py_ssize_t length;
         const char *utf8 = PyUnicode_AsUTF8AndSize(value, &length);
         if (!utf8) return -1;
-        char *copy = ferra_allocate(ctx, (size_t)length + 1);
+        char *copy = lyca_allocate(ctx, (size_t)length + 1);
         if (!copy) return -1;
         memcpy(copy, utf8, (size_t)length);
         copy[length] = 0;
-        *(FerraString *)out = (FerraString){copy, length};
+        *(LycaString *)out = (LycaString){copy, length};
     }
     return 0;
 }
 
-static PyObject *ferra_to_python(const void *value, int kind, Py_ssize_t count) {
+static PyObject *lyca_to_python(const void *value, int kind, Py_ssize_t count) {
     if (count >= 0) {
         PyObject *list = PyList_New(count);
         if (!list) return NULL;
         for (Py_ssize_t i = 0; i < count; i++) {
-            PyObject *item = ferra_to_python((const char *)value + (size_t)i * ferra_size(kind), kind, -1);
+            PyObject *item = lyca_to_python((const char *)value + (size_t)i * lyca_size(kind), kind, -1);
             if (!item) { Py_DECREF(list); return NULL; }
             PyList_SET_ITEM(list, i, item);
         }
@@ -126,7 +126,7 @@ static PyObject *ferra_to_python(const void *value, int kind, Py_ssize_t count) 
         case 4: return PyFloat_FromDouble(*(const double *)value);
         case 5: return PyBool_FromLong(*(const uint8_t *)value != 0);
         default: {
-            const FerraString *s = value;
+            const LycaString *s = value;
             return PyUnicode_DecodeUTF8(s->data, (Py_ssize_t)s->length, "strict");
         }
     }

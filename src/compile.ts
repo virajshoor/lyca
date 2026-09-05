@@ -24,7 +24,7 @@ export function compileSource(source: string, filename: string, options: Compile
 export function compileFile(path: string, output: string, options: CompileOptions = {}): string {
   const source = readFileSync(path, "utf8");
   const fail = (message: string, hint?: string): never => {
-    throw new CompileError("FER301", message, spanOf(1, 1), path, source, hint);
+    throw new CompileError("LYC301", message, spanOf(1, 1), path, source, hint);
   };
   const target = options.target ?? "native";
   const opt = options.opt ?? 2;
@@ -44,13 +44,13 @@ export function compileFile(path: string, output: string, options: CompileOption
   const absOut = resolve(output + (target === "python" ? python!.suffix : ""));
   if ([absOut, absOut + ".ll", absOut + ".c"].includes(resolve(path))) fail("output would overwrite the source file");
   mkdirSync(dirname(absOut), { recursive: true });
-  const stage = mkdtempSync(join(dirname(absOut), ".ferra-"));
+  const stage = mkdtempSync(join(dirname(absOut), ".lyca-"));
   try {
     const ll = join(stage, "program.ll"), binary = join(stage, "artifact");
     writeFileSync(ll, ir);
     const runtime = python ? join(stage, "bridge.c") : join(__dirname, "runtime/native.c");
     if (python) writeFileSync(runtime, pythonBridge(checked, moduleName, python));
-    const usesRuntime = python || ir.includes("call void @ferra_fail") || ir.includes("call i32 @ferra_print");
+    const usesRuntime = python || ir.includes("call void @lyca_fail") || ir.includes("call i32 @lyca_print");
     const args = [ll, ...(usesRuntime ? [runtime] : []), `-O${opt}`, "-Wno-override-module", "-o", binary];
     if (python) args.push("-I", python.include);
     if (target === "python") {

@@ -8,7 +8,7 @@
     "max_ns": 57.45334,
     "calls_per_sample": 100000
   },
-  "ferra_add": {
+  "lyca_add": {
     "median_ns": 391.41084,
     "min_ns": 386.16208,
     "max_ns": 397.30125,
@@ -20,7 +20,7 @@
     "max_ns": 50.80958,
     "calls_per_sample": 100000
   },
-  "ferra_calls_python_sqrt": {
+  "lyca_calls_python_sqrt": {
     "median_ns": 694.11167,
     "min_ns": 691.34084,
     "max_ns": 698.43,
@@ -32,7 +32,7 @@
     "max_ns": 7812584.0,
     "calls_per_sample": 1
   },
-  "ferra_mix": {
+  "lyca_mix": {
     "median_ns": 93666.0,
     "min_ns": 93417.0,
     "max_ns": 97708.0,

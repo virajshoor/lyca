@@ -1,22 +1,22 @@
 import { Expr, FnDecl, Stmt } from "../ast";
 import { CompileError } from "../diagnostics";
-import { CheckedProgram, FerraType, FnInfo, pythonType } from "../typechecker";
+import { CheckedProgram, LycaType, FnInfo, pythonType } from "../typechecker";
 
 const cmp: Record<string, [string, string]> = { "==": ["eq", "oeq"], "!=": ["ne", "une"], "<": ["slt", "olt"], ">": ["sgt", "ogt"], "<=": ["sle", "ole"], ">=": ["sge", "oge"] };
 const ops: Record<string, [string, string]> = { "+": ["add", "fadd"], "-": ["sub", "fsub"], "*": ["mul", "fmul"], "/": ["sdiv", "fdiv"], "%": ["srem", "srem"] };
 
-type Value = { ref: string; ty: FerraType };
-type Place = { ptr: string; ty: FerraType };
+type Value = { ref: string; ty: LycaType };
+type Place = { ptr: string; ty: LycaType };
 
-export function irType(t: FerraType): string {
+export function irType(t: LycaType): string {
   switch (t.kind) {
     case "f32": return "float";
     case "f64": return "double";
     case "bool": return "i1";
-    case "string": return "%ferra.String";
+    case "string": return "%lyca.String";
     case "ref": return "ptr";
     case "array": return `[${t.size} x ${irType(t.element)}]`;
-    case "struct": return `%ferra.struct.${t.name}`;
+    case "struct": return `%lyca.struct.${t.name}`;
     default: return t.kind;
   }
 }
@@ -39,16 +39,16 @@ class Emitter {
 
   emit(): string {
     const header = [
-      "; Ferra LLVM IR (host target)",
-      "%ferra.String = type { ptr, i64 }",
-      "declare void @ferra_fail(ptr, i32, i32) noreturn",
-      "declare i32 @ferra_print(ptr)",
+      "; Lyca LLVM IR (host target)",
+      "%lyca.String = type { ptr, i64 }",
+      "declare void @lyca_fail(ptr, i32, i32) noreturn",
+      "declare i32 @lyca_print(ptr)",
     ];
     for (const st of this.checked.structs.values()) {
-      header.push(`%ferra.struct.${st.name} = type { ${st.fields.map(f => irType(f.type)).join(", ")} }`);
+      header.push(`%lyca.struct.${st.name} = type { ${st.fields.map(f => irType(f.type)).join(", ")} }`);
     }
     for (const fn of this.checked.fns.values()) {
-      if (fn.pythonModule) header.push(`declare void @ferra_py_${fn.name}(${["ptr", "ptr", ...fn.params.map(() => "ptr")].join(", ")})`);
+      if (fn.pythonModule) header.push(`declare void @lyca_py_${fn.name}(${["ptr", "ptr", ...fn.params.map(() => "ptr")].join(", ")})`);
     }
     const bodies: string[] = [];
     for (const d of this.checked.ast.decls) {
@@ -62,7 +62,7 @@ class Emitter {
     if (this.checked.target === "native") {
       const hasPython = [...this.checked.fns.values()].some(f => f.pythonModule);
       if (hasPython) bodies.push(this.exportWrapper(this.checked.fns.get("main")!));
-      else bodies.push("define i32 @main() {\nentry:\n  %r = call i32 @ferra.fn.main(ptr null)\n  ret i32 %r\n}");
+      else bodies.push("define i32 @main() {\nentry:\n  %r = call i32 @lyca.fn.main(ptr null)\n  ret i32 %r\n}");
     }
     return [...header, ...bodies, ...this.strings].join("\n\n") + "\n";
   }
@@ -70,13 +70,13 @@ class Emitter {
   // Pointer-only boundary avoids platform-specific C aggregate calling conventions.
   private exportWrapper(fn: FnInfo): string {
     const args = fn.params.map((p, i) => `ptr %a${i}`);
-    const lines = [`define void @ferra_export_${fn.name}(${["ptr %ctx", "ptr %out", ...args].join(", ")}) {`, "entry:"];
+    const lines = [`define void @lyca_export_${fn.name}(${["ptr %ctx", "ptr %out", ...args].join(", ")}) {`, "entry:"];
     const values = fn.params.map((p, i) => {
       if (p.type.kind === "ref") return `ptr %a${i}`;
       lines.push(`  %v${i} = load ${irType(p.type)}, ptr %a${i}`);
       return `${irType(p.type)} %v${i}`;
     });
-    lines.push(`  %r = call ${irType(fn.ret)} @ferra.fn.${fn.name}(${["ptr %ctx", ...values].join(", ")})`, `  store ${irType(fn.ret)} %r, ptr %out`, "  ret void", "}");
+    lines.push(`  %r = call ${irType(fn.ret)} @lyca.fn.${fn.name}(${["ptr %ctx", ...values].join(", ")})`, `  store ${irType(fn.ret)} %r, ptr %out`, "  ret void", "}");
     return lines.join("\n");
   }
 
@@ -96,7 +96,7 @@ class Emitter {
     }
     for (const stmt of fn.body) this.emitStmt(stmt);
     if (!this.terminated) this.body.push("  unreachable");
-    return [`define internal ${irType(info.ret)} @ferra.fn.${fn.name}(${["ptr %ctx", ...args].join(", ")}) {`, "entry:", ...this.allocations, ...this.body, "}"].join("\n");
+    return [`define internal ${irType(info.ret)} @lyca.fn.${fn.name}(${["ptr %ctx", ...args].join(", ")}) {`, "entry:", ...this.allocations, ...this.body, "}"].join("\n");
   }
 
   private emitBlock(stmts: Stmt[]) {
@@ -162,7 +162,7 @@ class Emitter {
         const outer = new Map(this.locals);
         // Both bounds use the enclosing scope and are evaluated once.
         const start = this.emitExpr(stmt.start), bound = this.emitExpr(stmt.end);
-        const ty: FerraType = { kind: "i32" };
+        const ty: LycaType = { kind: "i32" };
         const ptr = this.alloca(ty);
         this.store(ty, start.ref, ptr);
         this.locals.set(stmt.name, { ptr, ty });
@@ -188,7 +188,7 @@ class Emitter {
     }
   }
 
-  private emitExpr(expr: Expr, expected?: FerraType): Value {
+  private emitExpr(expr: Expr, expected?: LycaType): Value {
     if (expected?.kind === "ref") {
       if (expr.kind === "borrow") return { ref: this.placeExpr(expr.expr).ptr, ty: expected };
       if (expr.kind === "name" && this.locals.get(expr.name)?.ty.kind === "ref") return this.load(this.locals.get(expr.name)!);
@@ -208,7 +208,7 @@ class Emitter {
         let global = this.stringPool.get(expr.value);
         const bytes = Buffer.from(expr.value, "utf8");
         if (!global) {
-          global = `@ferra.str.${this.strings.length}`;
+          global = `@lyca.str.${this.strings.length}`;
           const hex = [...bytes, 0].map(b => "\\" + b.toString(16).padStart(2, "0")).join("");
           this.strings.push(`${global} = private unnamed_addr constant [${bytes.length + 1} x i8] c"${hex}"`);
           this.stringPool.set(expr.value, global);
@@ -230,7 +230,7 @@ class Emitter {
       case "call": {
         const fn = this.checked.fns.get(expr.callee)!;
         const args = expr.args.map((a, i) => this.emitExpr(a, fn.params[i]!.type));
-        if (fn.name === "print") return { ref: this.instruction(`call i32 @ferra_print(ptr ${args[0]!.ref})`), ty };
+        if (fn.name === "print") return { ref: this.instruction(`call i32 @lyca_print(ptr ${args[0]!.ref})`), ty };
         if (fn.pythonModule) {
           const out = this.alloca(fn.ret);
           const pointers = args.map((a, i) => {
@@ -239,10 +239,10 @@ class Emitter {
             this.store(a.ty, a.ref, ptr);
             return `ptr ${ptr}`;
           });
-          this.body.push(`  call void @ferra_py_${fn.name}(${["ptr %ctx", `ptr ${out}`, ...pointers].join(", ")})`);
+          this.body.push(`  call void @lyca_py_${fn.name}(${["ptr %ctx", `ptr ${out}`, ...pointers].join(", ")})`);
           return this.load({ ptr: out, ty });
         }
-        return { ref: this.instruction(`call ${irType(ty)} @ferra.fn.${fn.name}(${["ptr %ctx", ...args.map(a => `${irType(a.ty)} ${a.ref}`)].join(", ")})`), ty };
+        return { ref: this.instruction(`call ${irType(ty)} @lyca.fn.${fn.name}(${["ptr %ctx", ...args.map(a => `${irType(a.ty)} ${a.ref}`)].join(", ")})`), ty };
       }
       case "index": case "field": return this.load(this.placeExpr(expr));
       case "struct": {
@@ -266,7 +266,7 @@ class Emitter {
     }
   }
 
-  private emitBinary(expr: Extract<Expr, { kind: "binary" }>, ty: FerraType): Value {
+  private emitBinary(expr: Extract<Expr, { kind: "binary" }>, ty: LycaType): Value {
     const op = expr.op;
     const l = this.emitExpr(expr.left);
     if (op === "and" || op === "or") {
@@ -334,7 +334,7 @@ class Emitter {
     const error = this.label("error"), ok = this.label("ok");
     this.body.push(`  br i1 ${bad}, label %${error}, label %${ok}`);
     this.place(error);
-    this.body.push(`  call void @ferra_fail(ptr %ctx, i32 ${code}, i32 ${line})`, "  unreachable");
+    this.body.push(`  call void @lyca_fail(ptr %ctx, i32 ${code}, i32 ${line})`, "  unreachable");
     this.place(ok);
   }
 
@@ -342,17 +342,17 @@ class Emitter {
     return { ref: this.instruction(`load ${irType(place.ty)}, ptr ${place.ptr}`), ty: place.ty };
   }
 
-  private alloca(ty: FerraType): string {
+  private alloca(ty: LycaType): string {
     const ptr = `%t${this.tmp++}`;
     this.allocations.push(`  ${ptr} = alloca ${irType(ty)}`);
     return ptr;
   }
 
-  private store(ty: FerraType, value: string, ptr: string) { this.body.push(`  store ${irType(ty)} ${value}, ptr ${ptr}`); }
+  private store(ty: LycaType, value: string, ptr: string) { this.body.push(`  store ${irType(ty)} ${value}, ptr ${ptr}`); }
   private instruction(op: string): string { const r = `%t${this.tmp++}`; this.body.push(`  ${r} = ${op}`); return r; }
   private label(prefix: string): string { return `${prefix}${this.lab++}`; }
   private place(label: string) { this.body.push(`${label}:`); this.terminated = false; }
   private ice(message: string): never {
-    throw new CompileError("FER301", `internal compiler error: ${message}`, this.checked.ast.span, this.filename, "", "this is a compiler bug");
+    throw new CompileError("LYC301", `internal compiler error: ${message}`, this.checked.ast.span, this.filename, "", "this is a compiler bug");
   }
 }

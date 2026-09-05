@@ -30,14 +30,14 @@ function compilerSource(n) {
 }
 const compiler = [30, 300, 1000].map(functions => {
   const source = compilerSource(functions);
-  const tokens = lex(source, "bench.fe"), ast = parse(tokens, source, "bench.fe");
-  const checked = typecheck(ast, source, "bench.fe");
+  const tokens = lex(source, "bench.lyca"), ast = parse(tokens, source, "bench.lyca");
+  const checked = typecheck(ast, source, "bench.lyca");
   return { functions, bytes: Buffer.byteLength(source),
-    lex: timed(() => lex(source, "bench.fe")),
-    parse: timed(() => parse(tokens, source, "bench.fe")),
-    typecheck: timed(() => typecheck(ast, source, "bench.fe")),
-    codegen: timed(() => codegen(checked, "bench.fe")),
-    pipeline: timed(() => compileSource(source, "bench.fe")),
+    lex: timed(() => lex(source, "bench.lyca")),
+    parse: timed(() => parse(tokens, source, "bench.lyca")),
+    typecheck: timed(() => typecheck(ast, source, "bench.lyca")),
+    codegen: timed(() => codegen(checked, "bench.lyca")),
+    pipeline: timed(() => compileSource(source, "bench.lyca")),
   };
 });
 
@@ -55,18 +55,18 @@ const workloads = [
     expected: (() => { let s = 1; for (let i = 0; i < 20000000; i++) s = (Math.imul(s, 1664525) + 1013904223) | 0; return (s % 251 + 251) % 251; })(),
   },
 ];
-const dir = mkdtempSync(join(tmpdir(), "ferra-bench-"));
+const dir = mkdtempSync(join(tmpdir(), "lyca-bench-"));
 let runtime;
 try {
   runtime = workloads.map(w => {
-    const file = join(dir, `${w.name}.fe`), c = join(dir, `${w.name}.c`);
+    const file = join(dir, `${w.name}.lyca`), c = join(dir, `${w.name}.c`);
     writeFileSync(file, w.source); writeFileSync(c, w.c);
     function run(path) {
       const r = spawnSync(path, [], { encoding: "utf8", timeout: 30000 });
       if (r.error || r.status !== w.expected) throw new Error(`${w.name}: ${r.error ?? r.stderr}; expected ${w.expected}, got ${r.status}`);
     }
     const levels = values.baseline ? [0] : [0, 2];
-    const ferra = levels.map(opt => {
+    const lyca = levels.map(opt => {
       const out = join(dir, `${w.name}-O${opt}`);
       const build = timed(() => compileFile(file, out, { opt }), 5);
       return { opt, build, run: timed(() => run(out)), bytes: statSync(out).size };
@@ -76,7 +76,7 @@ try {
       const r = spawnSync("clang", [c, "-O2", "-o", out], { encoding: "utf8" });
       if (r.status !== 0) throw new Error(r.stderr);
     }, 5);
-    return { name: w.name, checksum: w.expected, ferra, c_O2: { build, run: timed(() => run(out)), bytes: statSync(out).size } };
+    return { name: w.name, checksum: w.expected, lyca, c_O2: { build, run: timed(() => run(out)), bytes: statSync(out).size } };
   });
 } finally { rmSync(dir, { recursive: true, force: true }); }
 function sourceHash(dir) {

@@ -154,11 +154,11 @@ export function lex(source: string, filename: string): Token[] {
       }
       if (peek() === "\t") {
         fail(
-          "FER003",
+          "LYC003",
           "tabs are not allowed; use spaces for indentation",
           line,
           col,
-          "Ferra uses space-only indentation, like Python with expandtabs disabled",
+          "Lyca uses space-only indentation, like Python with expandtabs disabled",
         );
       }
       if (peek() === "#" || peek() === "\n" || peek() === "\r" || i >= source.length) {
@@ -177,7 +177,7 @@ export function lex(source: string, filename: string): Token[] {
           }
           if (indents[indents.length - 1] !== spaces) {
             fail(
-              "FER004",
+              "LYC004",
               "inconsistent indentation",
               sl,
               1,
@@ -214,7 +214,7 @@ export function lex(source: string, filename: string): Token[] {
     }
 
     if (c === "\t") {
-      fail("FER003", "tabs are not allowed; use spaces for indentation", line, col);
+      fail("LYC003", "tabs are not allowed; use spaces for indentation", line, col);
     }
 
     if (c === "#") {
@@ -239,7 +239,7 @@ export function lex(source: string, filename: string): Token[] {
           const e = peek();
           const map: Record<string, string> = { n: "\n", t: "\t", "\\": "\\", '"': '"' };
           if (!(e in map)) {
-            fail("FER001", `unknown string escape '\\${e}'`, line, col - 1);
+            fail("LYC001", `unknown string escape '\\${e}'`, line, col - 1);
           }
           value += map[e];
           i++;
@@ -251,7 +251,7 @@ export function lex(source: string, filename: string): Token[] {
         }
       }
       if (peek() !== '"') {
-        fail("FER002", "unterminated string literal", sl, sc, "close the string with '\"'");
+        fail("LYC002", "unterminated string literal", sl, sc, "close the string with '\"'");
       }
       i++;
       col++;
@@ -308,7 +308,7 @@ export function lex(source: string, filename: string): Token[] {
       if ("([{".includes(c)) brackets.push(c);
       if (")]}".includes(c)) {
         const want = { ")": "(", "]": "[", "}": "{" }[c];
-        if (brackets.pop() !== want) fail("FER001", "mismatched closing bracket", sl, sc);
+        if (brackets.pop() !== want) fail("LYC001", "mismatched closing bracket", sl, sc);
       }
       i++;
       col++;
@@ -316,7 +316,7 @@ export function lex(source: string, filename: string): Token[] {
       continue;
     }
 
-    fail("FER001", `unexpected character ${JSON.stringify(c)}`, sl, sc);
+    fail("LYC001", `unexpected character ${JSON.stringify(c)}`, sl, sc);
   }
 
   if (!atLineStart && tokens[tokens.length - 1]?.kind !== "newline") {

@@ -37,7 +37,7 @@ class Parser {
       else if (this.at("struct")) decls.push(this.parseStruct());
       else {
         this.err(
-          "FER101",
+          "LYC101",
           `unexpected ${this.describe(this.peek())}; expected 'def' or 'struct'`,
           this.peek().span,
           "top-level items must be functions or structs",
@@ -54,7 +54,7 @@ class Parser {
     this.expect("python");
     const module = this.expect("string");
     if (!/^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$/.test(module.value)) {
-      this.err("FER102", "expected a dotted Python module name", module.span);
+      this.err("LYC102", "expected a dotted Python module name", module.span);
     }
     this.expect("def");
     const name = this.expect("ident");
@@ -125,7 +125,7 @@ class Parser {
     }
     const end = this.expect("dedent").span;
     if (fields.length === 0) {
-      this.err("FER101", "struct must have at least one field", name.span);
+      this.err("LYC101", "struct must have at least one field", name.span);
     }
     return { kind: "struct", name: name.value, fields, span: join(start, end) };
   }
@@ -142,13 +142,13 @@ class Parser {
       const stmt = this.parseStmt();
       stmts.push(stmt);
       if (!["if", "while", "for"].includes(stmt.kind) && !this.at("newline", "dedent", "eof")) {
-        this.err("FER102", "expected newline after statement", this.peek().span);
+        this.err("LYC102", "expected newline after statement", this.peek().span);
       }
       this.skipNL();
     }
     this.expect("dedent");
     if (stmts.length === 0) {
-      this.err("FER104", "indented block cannot be empty", this.peek().span);
+      this.err("LYC104", "indented block cannot be empty", this.peek().span);
     }
     return stmts;
   }
@@ -164,7 +164,7 @@ class Parser {
       const value = this.parseExpr();
       if (!isLvalue(expr)) {
         this.err(
-          "FER105",
+          "LYC105",
           "invalid assignment target",
           expr.span,
           "assign to a name, field, or array index",
@@ -262,7 +262,7 @@ class Parser {
       const rbr = this.expect("]").span;
       const size = Number(sizeTok.value);
       if (size < 0 || !Number.isSafeInteger(size) || size > 2147483647) {
-        this.err("FER101", "array size must be a non-negative integer", sizeTok.span);
+        this.err("LYC101", "array size must be a non-negative integer", sizeTok.span);
       }
       return { kind: "array", element, size, span: join(lbr, rbr) };
     }
@@ -350,7 +350,7 @@ class Parser {
     for (;;) {
       if (this.eat("(")) {
         if (expr.kind !== "name") {
-          this.err("FER101", "only named functions can be called", expr.span);
+          this.err("LYC101", "only named functions can be called", expr.span);
         }
         const args: Expr[] = [];
         this.skipNL();
@@ -424,7 +424,7 @@ class Parser {
       const end = this.expect("]").span;
       return { kind: "array", elements, span: join(start, end) };
     }
-    this.err("FER101", `unexpected ${this.describe(this.peek())} in expression`, this.peek().span);
+    this.err("LYC101", `unexpected ${this.describe(this.peek())} in expression`, this.peek().span);
   }
 
   private parseStructLit(name: Token): Expr {
@@ -481,7 +481,7 @@ class Parser {
   private expect(kind: TokenKind): Token {
     if (!this.at(kind)) {
       this.err(
-        "FER102",
+        "LYC102",
         `expected ${kind}, found ${this.describe(this.peek())}`,
         this.peek().span,
       );

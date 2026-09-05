@@ -1,14 +1,14 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { CheckedProgram, FerraType, FnInfo } from "./typechecker";
+import { CheckedProgram, LycaType, FnInfo } from "./typechecker";
 
 export type PythonConfig = { executable: string; include: string; suffix: string; link: string[]; paths: string[]; version: string };
 
 export function pythonConfig(executable: string): PythonConfig {
   const script = `import json, os, shlex, sys, sysconfig
 if sys.version_info < (3, 10) or sys.implementation.name != 'cpython' or sysconfig.get_config_var('Py_GIL_DISABLED'):
-    raise RuntimeError('Ferra requires GIL-enabled CPython 3.10+')
+    raise RuntimeError('Lyca requires GIL-enabled CPython 3.10+')
 v = sysconfig.get_config_var
 framework = v('PYTHONFRAMEWORK')
 if framework:
@@ -24,31 +24,31 @@ print(json.dumps(dict(executable=sys.executable, include=sysconfig.get_path('inc
   return JSON.parse(r.stdout) as PythonConfig;
 }
 
-function shape(t: FerraType): { c: string; kind: number; count: number } {
+function shape(t: LycaType): { c: string; kind: number; count: number } {
   if (t.kind === "ref") return shape(t.inner);
   if (t.kind === "array") return { ...shape(t.element), count: t.size };
-  const types: Record<string, [string, number]> = { i32: ["int32_t", 1], i64: ["int64_t", 2], f32: ["float", 3], f64: ["double", 4], bool: ["uint8_t", 5], string: ["FerraString", 6] };
+  const types: Record<string, [string, number]> = { i32: ["int32_t", 1], i64: ["int64_t", 2], f32: ["float", 3], f64: ["double", 4], bool: ["uint8_t", 5], string: ["LycaString", 6] };
   const [c, kind] = types[t.kind]!;
   return { c, kind, count: -1 };
 }
 
-function variable(t: FerraType, name: string): string {
+function variable(t: LycaType, name: string): string {
   const s = shape(t);
   return `${s.c} ${name}${s.count >= 0 ? `[${Math.max(1, s.count)}]` : ""} = {0};`;
 }
 
-function from(t: FerraType, object: string, destination: string): string {
+function from(t: LycaType, object: string, destination: string): string {
   const s = shape(t);
-  return `ferra_from_python(ctx, ${object}, &${destination}, ${s.kind}, ${s.count})`;
+  return `lyca_from_python(ctx, ${object}, &${destination}, ${s.kind}, ${s.count})`;
 }
 
-function to(t: FerraType, pointer: string): string {
+function to(t: LycaType, pointer: string): string {
   const s = shape(t);
-  return `ferra_to_python(${pointer}, ${s.kind}, ${s.count})`;
+  return `lyca_to_python(${pointer}, ${s.kind}, ${s.count})`;
 }
 
 function declaration(fn: FnInfo): string {
-  return `extern void ferra_export_${fn.name}(void *, void *${fn.params.map(() => ", const void *").join("")});`;
+  return `extern void lyca_export_${fn.name}(void *, void *${fn.params.map(() => ", const void *").join("")});`;
 }
 
 function wrapper(fn: FnInfo): string {
@@ -59,22 +59,22 @@ static PyObject *wrap_${fn.name}(PyObject *self, PyObject *args) {
         PyErr_SetString(PyExc_TypeError, "${fn.name} expects ${fn.params.length} positional arguments");
         return NULL;
     }
-    FerraContext *ctx = calloc(1, sizeof(*ctx));
+    LycaContext *ctx = calloc(1, sizeof(*ctx));
     if (!ctx) return PyErr_NoMemory();
-    if (setjmp(ctx->jump)) { ferra_destroy(ctx); return NULL; }
+    if (setjmp(ctx->jump)) { lyca_destroy(ctx); return NULL; }
     ${fn.params.map((p, i) => variable(p.type, `a${i}`)).join("\n    ")}
     ${variable(fn.ret, "out")}
-    ${fn.params.map((p, i) => `if (${from(p.type, `PyTuple_GET_ITEM(args, ${i})`, `a${i}`)} < 0) { ferra_destroy(ctx); return NULL; }`).join("\n    ")}
-    ferra_export_${fn.name}(ctx, &out${fn.params.map((_, i) => `, &a${i}`).join("")});
+    ${fn.params.map((p, i) => `if (${from(p.type, `PyTuple_GET_ITEM(args, ${i})`, `a${i}`)} < 0) { lyca_destroy(ctx); return NULL; }`).join("\n    ")}
+    lyca_export_${fn.name}(ctx, &out${fn.params.map((_, i) => `, &a${i}`).join("")});
     PyObject *result = ${to(fn.ret, "&out")};
-    ferra_destroy(ctx);
+    lyca_destroy(ctx);
     return result;
 }`;
 }
 
 function foreign(fn: FnInfo): string {
-  return `void ferra_py_${fn.name}(void *context, void *out${fn.params.map((_, i) => `, const void *a${i}`).join("")}) {
-    FerraContext *ctx = context;
+  return `void lyca_py_${fn.name}(void *context, void *out${fn.params.map((_, i) => `, const void *a${i}`).join("")}) {
+    LycaContext *ctx = context;
     PyObject *module = NULL, *callable = NULL, *args = NULL, *result = NULL;
     module = PyImport_ImportModule(${JSON.stringify(fn.pythonModule)});
     if (!module) goto fail;
@@ -89,7 +89,7 @@ function foreign(fn: FnInfo): string {
     }`).join("\n    ")}
     result = PyObject_CallObject(callable, args);
     if (!result) goto fail;
-    if (ferra_from_python(ctx, result, out, ${shape(fn.ret).kind}, ${shape(fn.ret).count}) < 0) goto fail;
+    if (lyca_from_python(ctx, result, out, ${shape(fn.ret).kind}, ${shape(fn.ret).count}) < 0) goto fail;
     Py_DECREF(result); Py_DECREF(args); Py_DECREF(callable); Py_DECREF(module);
     return;
 fail:
@@ -127,12 +127,12 @@ int main(void) {
         if (!entry || PyList_Append(path, entry) < 0) { Py_XDECREF(entry); PyErr_Print(); Py_FinalizeEx(); return 1; }
         Py_DECREF(entry);
     }`).join("\n    ")}
-    FerraContext *ctx = calloc(1, sizeof(*ctx));
+    LycaContext *ctx = calloc(1, sizeof(*ctx));
     if (!ctx) { PyErr_NoMemory(); PyErr_Print(); Py_FinalizeEx(); return 1; }
-    if (setjmp(ctx->jump)) { PyErr_Print(); ferra_destroy(ctx); Py_FinalizeEx(); return 1; }
+    if (setjmp(ctx->jump)) { PyErr_Print(); lyca_destroy(ctx); Py_FinalizeEx(); return 1; }
     int32_t result = 0;
-    ferra_export_main(ctx, &result);
-    ferra_destroy(ctx);
+    lyca_export_main(ctx, &result);
+    lyca_destroy(ctx);
     if (Py_FinalizeEx() < 0) return 1;
     return result;
 }`);

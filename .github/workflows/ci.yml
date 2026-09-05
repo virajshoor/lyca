@@ -28,6 +28,6 @@ jobs:
       - run: npm run build
       - run: npm test
         env:
-          FERRA_REQUIRE_PYTHON: '1'
-      - run: node dist/cli/index.js build examples/hello.fe -o build/hello
+          LYCA_REQUIRE_PYTHON: '1'
+      - run: node dist/cli/index.js build examples/hello.lyca -o build/hello
       - run: ./build/hello

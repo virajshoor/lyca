@@ -6,8 +6,8 @@ Native builds now default to clang `-O2`. The compiler emits entry-block storage
 
 ```bash
 npm run build
-node benchmarks/run.cjs --output /tmp/ferra-bench.json
-node benchmarks/python.cjs /tmp/ferra-python-bench.json
+node benchmarks/run.cjs --output /tmp/lyca-bench.json
+node benchmarks/python.cjs /tmp/lyca-python-bench.json
 ```
 
 `run.cjs --root /path/to/older/checkout --baseline` can measure the old compiler after building its `dist` directory. The baseline in this repository is commit `cc1b610`; the after report records the compiler-source hash used before committing this change. Raw reports: [before](benchmarks/before.json), [after](benchmarks/after.json), [Python](benchmarks/python.json).
@@ -23,7 +23,7 @@ Milliseconds, lower is better:
 | Recursive Fibonacci, n=34 | 27.96 | 20.89 | 20.61 |
 | 20 million integer recurrence steps | 28.24 | 22.53 | 22.28 |
 
-The new defaults reduced elapsed time about 25% and 20% in these two workloads. Ferra and C are close here; this is not evidence for a universal “C-like performance” guarantee. These tests do not cover I/O, real applications, large arrays, or Python-boundary copying. Checksums and matching fixed-width arithmetic keep the compared work equivalent.
+The new defaults reduced elapsed time about 25% and 20% in these two workloads. Lyca and C are close here; this is not evidence for a universal “C-like performance” guarantee. These tests do not cover I/O, real applications, large arrays, or Python-boundary copying. Checksums and matching fixed-width arithmetic keep the compared work equivalent.
 
 Build latency also matters. The new O2 builds took about 53 ms and 52 ms, versus about 47 ms and 48 ms for the old O0 builds. The new compiler exposes `--opt 0` when build latency matters more than optimization. New O0 recursion is slower than the old O0 binary; optimized builds remove much of the extra internal calling/storage overhead. See the raw report rather than assuming every mode improved.
 
@@ -41,9 +41,9 @@ Treat sub-millisecond results as noisy. Do not compare a lexer improvement with 
 
 ## Python boundary
 
-The measured scalar addition cost was about **391 ns through Ferra**, versus **57 ns for a small Python function**, including benchmark-loop and lambda overhead. Calling Python `math.sqrt` through Ferra cost about **694 ns**, versus **49 ns directly**. Going through the bridge for tiny Python operations loses time.
+The measured scalar addition cost was about **391 ns through Lyca**, versus **57 ns for a small Python function**, including benchmark-loop and lambda overhead. Calling Python `math.sqrt` through Lyca cost about **694 ns**, versus **49 ns directly**. Going through the bridge for tiny Python operations loses time.
 
-A batched 100,000-step integer recurrence took about **94 μs in Ferra** versus **7.55 ms in Python**, roughly 81× on this one workload. Keep loops and numerical work inside a native function; cross the boundary once per batch. This is not a NumPy comparison or a claim that all Python code gets that speedup.
+A batched 100,000-step integer recurrence took about **94 μs in Lyca** versus **7.55 ms in Python**, roughly 81× on this one workload. Keep loops and numerical work inside a native function; cross the boundary once per batch. This is not a NumPy comparison or a claim that all Python code gets that speedup.
 
 Arrays copy at the boundary. The GIL stays held. Python-derived strings are freed at the end of the outer call, so long calls can retain substantial temporary string memory. No zero-copy, concurrent-kernel, or bounded-string-memory performance claim is made.
 

@@ -5,9 +5,9 @@ import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import { compileFile, compileSource } from "../src/compile";
 
-const python = process.env.FERRA_PYTHON ?? "python3";
+const python = process.env.LYCA_PYTHON ?? "python3";
 const available = spawnSync(python, ["-c", "import sys; assert sys.implementation.name == 'cpython'"]).status === 0;
-if (!available && process.env.FERRA_REQUIRE_PYTHON) throw new Error("Python integration tests require CPython");
+if (!available && process.env.LYCA_REQUIRE_PYTHON) throw new Error("Python integration tests require CPython");
 
 const source = `extern python "math" def sqrt(x: f64) -> f64
 extern python "builtins" def str(n: i32) -> string
@@ -126,11 +126,11 @@ print('python bridge ok')
 const suite = available ? describe : describe.skip;
 suite("Python bridge", () => {
   it.each([0, 2] as const)("round-trips typed values and exceptions at O%i", opt => {
-    const dir = mkdtempSync(join(tmpdir(), "ferra-python-"));
+    const dir = mkdtempSync(join(tmpdir(), "lyca-python-"));
     try {
-      writeFileSync(join(dir, "kernels.fe"), source);
+      writeFileSync(join(dir, "kernels.lyca"), source);
       writeFileSync(join(dir, "bridge_fixture.py"), "def reverse(a): return list(reversed(a))\ndef raises(): raise RuntimeError('from Python')\ndef wrong(): return 'not an int'\n");
-      const out = compileFile(join(dir, "kernels.fe"), join(dir, "kernels"), { target: "python", python, opt });
+      const out = compileFile(join(dir, "kernels.lyca"), join(dir, "kernels"), { target: "python", python, opt });
       expect(out).toMatch(/\.so$/);
       const r = spawnSync(python, ["-c", assertions], { cwd: dir, encoding: "utf8", timeout: 15000, env: { ...process.env, PYTHONMALLOC: "debug" } });
       expect(r.error).toBeUndefined();
@@ -141,9 +141,9 @@ suite("Python bridge", () => {
   });
 
   it("embeds the selected Python interpreter in a native executable", () => {
-    const dir = mkdtempSync(join(tmpdir(), "ferra-embed-"));
+    const dir = mkdtempSync(join(tmpdir(), "lyca-embed-"));
     try {
-      const file = join(dir, "main.fe"), out = join(dir, "main");
+      const file = join(dir, "main.lyca"), out = join(dir, "main");
       writeFileSync(file, 'extern python "math" def sqrt(x: f64) -> f64\ndef main() -> i32:\n    if sqrt(81.0) == 9.0:\n        return 42\n    return 0\n');
       compileFile(file, out, { python });
       expect(spawnSync(out).status).toBe(42);
@@ -156,14 +156,14 @@ suite("Python bridge", () => {
   });
 
   it("diagnoses unsupported Python signatures before invoking clang", () => {
-    expect(() => compileSource("struct A:\n    x: i32\ndef public(a: A) -> i32:\n    return a.x\n", "x.fe", { target: "python" })).toThrow(/Python boundary/);
+    expect(() => compileSource("struct A:\n    x: i32\ndef public(a: A) -> i32:\n    return a.x\n", "x.lyca", { target: "python" })).toThrow(/Python boundary/);
   });
 
   it("preserves an existing binary when the toolchain fails", () => {
-    const dir = mkdtempSync(join(tmpdir(), "ferra-preserve-"));
+    const dir = mkdtempSync(join(tmpdir(), "lyca-preserve-"));
     const originalPath = process.env.PATH;
     try {
-      const file = join(dir, "main.fe"), out = join(dir, "main");
+      const file = join(dir, "main.lyca"), out = join(dir, "main");
       writeFileSync(file, "def main() -> i32:\n    return 0\n");
       writeFileSync(out, "existing artifact");
       process.env.PATH = dir;

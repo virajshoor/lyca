@@ -12,26 +12,26 @@ function refFib(n: number): number {
 
 describe("e2e", () => {
   it("emits LLVM IR for fib", () => {
-    const src = readFileSync("examples/fib.fe", "utf8");
-    const ir = compileSource(src, "examples/fib.fe");
-    expect(ir).toContain("define internal i32 @ferra.fn.fib(ptr %ctx, i32 %p0)");
+    const src = readFileSync("examples/fib.lyca", "utf8");
+    const ir = compileSource(src, "examples/fib.lyca");
+    expect(ir).toContain("define internal i32 @lyca.fn.fib(ptr %ctx, i32 %p0)");
     expect(ir).toContain("define i32 @main()");
-    expect(ir).toContain("call i32 @ferra.fn.fib");
+    expect(ir).toContain("call i32 @lyca.fn.fib");
   });
 
-  it("compiles fib.fe to a binary whose exit code matches a JS reference", () => {
-    const dir = mkdtempSync(join(tmpdir(), "ferra-"));
+  it("compiles fib.lyca to a binary whose exit code matches a JS reference", () => {
+    const dir = mkdtempSync(join(tmpdir(), "lyca-"));
     const out = join(dir, "fib");
-    compileFile("examples/fib.fe", out);
+    compileFile("examples/fib.lyca", out);
     const r = spawnSync(out, { encoding: "utf8" });
     expect(r.status).toBe(refFib(10));
     expect(refFib(10)).toBe(55);
   });
 
-  it("compiles hello.fe and prints Hello, World!", () => {
-    const dir = mkdtempSync(join(tmpdir(), "ferra-"));
+  it("compiles hello.lyca and prints Hello, World!", () => {
+    const dir = mkdtempSync(join(tmpdir(), "lyca-"));
     const out = join(dir, "hello");
-    compileFile("examples/hello.fe", out);
+    compileFile("examples/hello.lyca", out);
     const r = spawnSync(out, { encoding: "utf8" });
     expect(r.stdout).toBe("Hello, World!\n");
     expect(r.status).toBe(0);
