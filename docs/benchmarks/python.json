@@ -1,0 +1,41 @@
+{
+  "python": "3.14.7 (main, Aug  5 2026, 10:29:49) [Clang 21.0.0 (clang-2100.1.1.101)]",
+  "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "methodology": "3 warmups, 11 samples; Python loop and lambda overhead included; scalar calls and batched work reported separately",
+  "python_add": {
+    "median_ns": 56.90625,
+    "min_ns": 56.16125,
+    "max_ns": 59.33417,
+    "calls_per_sample": 100000
+  },
+  "lyca_add": {
+    "median_ns": 396.48958,
+    "min_ns": 389.52459,
+    "max_ns": 403.15334,
+    "calls_per_sample": 100000
+  },
+  "python_sqrt": {
+    "median_ns": 50.78,
+    "min_ns": 48.645,
+    "max_ns": 51.02,
+    "calls_per_sample": 100000
+  },
+  "lyca_calls_python_sqrt": {
+    "median_ns": 723.50583,
+    "min_ns": 714.61375,
+    "max_ns": 736.83958,
+    "calls_per_sample": 100000
+  },
+  "python_mix": {
+    "median_ns": 7609792.0,
+    "min_ns": 7379792.0,
+    "max_ns": 7846500.0,
+    "calls_per_sample": 1
+  },
+  "lyca_mix": {
+    "median_ns": 93500.0,
+    "min_ns": 93375.0,
+    "max_ns": 98291.0,
+    "calls_per_sample": 1
+  }
+}

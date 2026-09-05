@@ -5,6 +5,8 @@ export type TokenKind =
   | "int"
   | "float"
   | "string"
+  | "extern"
+  | "python"
   | "def"
   | "if"
   | "else"
@@ -58,6 +60,8 @@ export type Token = {
 };
 
 const KEYWORDS: Record<string, TokenKind> = {
+  extern: "extern",
+  python: "python",
   def: "def",
   if: "if",
   else: "else",
@@ -76,12 +80,43 @@ const KEYWORDS: Record<string, TokenKind> = {
   not: "not",
 };
 
+const twoKinds: Record<string, TokenKind> = {
+  "==": "==",
+  "!=": "!=",
+  "<=": "<=",
+  ">=": ">=",
+  "->": "->",
+  "..": "..",
+};
+
+const one: Record<string, TokenKind> = {
+  "+": "+",
+  "-": "-",
+  "*": "*",
+  "/": "/",
+  "%": "%",
+  "<": "<",
+  ">": ">",
+  "=": "=",
+  ":": ":",
+  ".": ".",
+  ",": ",",
+  "(": "(",
+  ")": ")",
+  "[": "[",
+  "]": "]",
+  "{": "{",
+  "}": "}",
+  ";": ";",
+  "&": "&",
+};
+
 function isIdentStart(c: string): boolean {
-  return /[A-Za-z_]/.test(c);
+  return (c >= "A" && c <= "Z") || (c >= "a" && c <= "z") || c === "_";
 }
 
 function isIdent(c: string): boolean {
-  return /[A-Za-z0-9_]/.test(c);
+  return isIdentStart(c) || isDigit(c);
 }
 
 function isDigit(c: string): boolean {
@@ -95,6 +130,7 @@ export function lex(source: string, filename: string): Token[] {
   let line = 1;
   let col = 1;
   let atLineStart = true;
+  const brackets: string[] = [];
 
   const fail = (code: string, msg: string, sl: number, sc: number, hint?: string) => {
     throw new CompileError(code, msg, spanOf(sl, sc), filename, source, hint);
@@ -129,7 +165,9 @@ export function lex(source: string, filename: string): Token[] {
         // blank or comment-only line: do not emit indent tokens
       } else {
         const current = indents[indents.length - 1]!;
-        if (spaces > current) {
+        if (brackets.length > 0) {
+          // Continuation indentation has no block meaning.
+        } else if (spaces > current) {
           indents.push(spaces);
           push("indent", "", sl, sc, line, col);
         } else if (spaces < current) {
@@ -161,7 +199,7 @@ export function lex(source: string, filename: string): Token[] {
     }
 
     if (c === "\n") {
-      push("newline", "\n", line, col, line, col + 1);
+      if (brackets.length === 0) push("newline", "\n", line, col, line, col + 1);
       i++;
       line++;
       col = 1;
@@ -245,26 +283,19 @@ export function lex(source: string, filename: string): Token[] {
     }
 
     if (isIdentStart(c)) {
-      let raw = "";
+      const start = i;
       while (isIdent(peek())) {
-        raw += peek();
         i++;
         col++;
       }
-      const kind = KEYWORDS[raw] ?? "ident";
+      const raw = source.slice(start, i);
+      const kind = Object.hasOwn(KEYWORDS, raw) ? KEYWORDS[raw]! : "ident";
       push(kind, raw, sl, sc, line, col);
       continue;
     }
 
     const two = c + peek(1);
-    const twoKinds: Record<string, TokenKind> = {
-      "==": "==",
-      "!=": "!=",
-      "<=": "<=",
-      ">=": ">=",
-      "->": "->",
-      "..": "..",
-    };
+
     if (twoKinds[two]) {
       i += 2;
       col += 2;
@@ -272,28 +303,13 @@ export function lex(source: string, filename: string): Token[] {
       continue;
     }
 
-    const one: Record<string, TokenKind> = {
-      "+": "+",
-      "-": "-",
-      "*": "*",
-      "/": "/",
-      "%": "%",
-      "<": "<",
-      ">": ">",
-      "=": "=",
-      ":": ":",
-      ".": ".",
-      ",": ",",
-      "(": "(",
-      ")": ")",
-      "[": "[",
-      "]": "]",
-      "{": "{",
-      "}": "}",
-      ";": ";",
-      "&": "&",
-    };
+
     if (one[c]) {
+      if ("([{".includes(c)) brackets.push(c);
+      if (")]}".includes(c)) {
+        const want = { ")": "(", "]": "[", "}": "{" }[c];
+        if (brackets.pop() !== want) fail("LYC001", "mismatched closing bracket", sl, sc);
+      }
       i++;
       col++;
       push(one[c], c, sl, sc, line, col);

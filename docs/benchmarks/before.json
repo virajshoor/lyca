@@ -1,0 +1,170 @@
+{
+  "timestamp": "2026-09-05T13:32:51.366Z",
+  "revision": "cc1b610a14ed73080d03662f47d2df529a3a2c62",
+  "working_tree": "clean",
+  "environment": {
+    "node": "v26.8.1",
+    "os": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M1 Max",
+    "clang": "Apple clang version 21.0.0 (clang-2100.3.20.102)"
+  },
+  "methodology": "3 warmups; median/min/max of 11 timed samples (5 builds); runtime includes process startup; checksums verified every run; no performance pass/fail threshold",
+  "compiler": [
+    {
+      "functions": 30,
+      "bytes": 3076,
+      "lex": {
+        "median_ms": 0.1565000000000012,
+        "min_ms": 0.10762499999999875,
+        "max_ms": 0.3311250000000001
+      },
+      "parse": {
+        "median_ms": 0.11749999999999972,
+        "min_ms": 0.07833400000000168,
+        "max_ms": 0.21745900000000162
+      },
+      "typecheck": {
+        "median_ms": 0.08387499999999903,
+        "min_ms": 0.0536670000000008,
+        "max_ms": 0.18341700000000216
+      },
+      "codegen": {
+        "median_ms": 0.12366700000000108,
+        "min_ms": 0.07641599999999826,
+        "max_ms": 0.14104099999999775
+      },
+      "pipeline": {
+        "median_ms": 0.3720829999999964,
+        "min_ms": 0.2753750000000039,
+        "max_ms": 0.549042
+      }
+    },
+    {
+      "functions": 300,
+      "bytes": 31016,
+      "lex": {
+        "median_ms": 1.0263749999999945,
+        "min_ms": 0.8945000000000007,
+        "max_ms": 3.133042000000003
+      },
+      "parse": {
+        "median_ms": 0.5598329999999976,
+        "min_ms": 0.500124999999997,
+        "max_ms": 0.9703330000000037
+      },
+      "typecheck": {
+        "median_ms": 0.2937079999999952,
+        "min_ms": 0.25449999999999307,
+        "max_ms": 0.4481660000000005
+      },
+      "codegen": {
+        "median_ms": 0.604416999999998,
+        "min_ms": 0.5257500000000022,
+        "max_ms": 0.7325000000000017
+      },
+      "pipeline": {
+        "median_ms": 2.803959000000006,
+        "min_ms": 2.371875000000003,
+        "max_ms": 3.552250000000001
+      }
+    },
+    {
+      "functions": 1000,
+      "bytes": 103816,
+      "lex": {
+        "median_ms": 3.9152090000000044,
+        "min_ms": 3.077458000000007,
+        "max_ms": 4.553875000000005
+      },
+      "parse": {
+        "median_ms": 1.3925409999999943,
+        "min_ms": 1.255125000000021,
+        "max_ms": 2.219374999999985
+      },
+      "typecheck": {
+        "median_ms": 0.6600420000000042,
+        "min_ms": 0.6107080000000167,
+        "max_ms": 1.0384160000000122
+      },
+      "codegen": {
+        "median_ms": 2.091540999999978,
+        "min_ms": 1.9027919999999767,
+        "max_ms": 2.4319579999999803
+      },
+      "pipeline": {
+        "median_ms": 8.75629200000003,
+        "min_ms": 8.17233299999998,
+        "max_ms": 9.826750000000004
+      }
+    }
+  ],
+  "runtime": [
+    {
+      "name": "recursion",
+      "checksum": 167,
+      "lyca": [
+        {
+          "opt": 0,
+          "build": {
+            "median_ms": 46.98400000000004,
+            "min_ms": 44.51633300000003,
+            "max_ms": 47.91324999999995
+          },
+          "run": {
+            "median_ms": 27.95508300000006,
+            "min_ms": 27.29012499999999,
+            "max_ms": 28.473958999999923
+          },
+          "bytes": 33504
+        }
+      ],
+      "c_O2": {
+        "build": {
+          "median_ms": 51.41516700000011,
+          "min_ms": 50.0880830000001,
+          "max_ms": 52.51216699999986
+        },
+        "run": {
+          "median_ms": 20.31874999999991,
+          "min_ms": 19.725040999999692,
+          "max_ms": 22.007666999999856
+        },
+        "bytes": 16872
+      }
+    },
+    {
+      "name": "integer_loop",
+      "checksum": 64,
+      "lyca": [
+        {
+          "opt": 0,
+          "build": {
+            "median_ms": 47.936916999999994,
+            "min_ms": 45.3444999999997,
+            "max_ms": 48.3757499999997
+          },
+          "run": {
+            "median_ms": 28.242125000000215,
+            "min_ms": 27.738542000000052,
+            "max_ms": 31.859082999999828
+          },
+          "bytes": 33472
+        }
+      ],
+      "c_O2": {
+        "build": {
+          "median_ms": 53.78629100000035,
+          "min_ms": 51.760042000000794,
+          "max_ms": 55.41645900000003
+        },
+        "run": {
+          "median_ms": 21.90770799999973,
+          "min_ms": 21.48070800000005,
+          "max_ms": 22.783959000000323
+        },
+        "bytes": 16848
+      }
+    }
+  ]
+}

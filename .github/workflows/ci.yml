@@ -1,0 +1,33 @@
+name: CI
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python: '3.12'
+          - os: macos-latest
+            python: '3.14'
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: clang --version
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+        env:
+          LYCA_REQUIRE_PYTHON: '1'
+      - run: node dist/cli/index.js build examples/hello.lyca -o build/hello
+      - run: ./build/hello

@@ -73,11 +73,11 @@ The lexer rejects tab characters (`LYC003`) so indent and dedent are unambiguous
 
 ## Is there a standard library?
 
-Only `print`. Everything else is in your file: functions, structs, arrays. There are no modules and no `import` in v0.
+Native v0 has only `print`; everything else is in your file: functions, structs, arrays. There are no Lyca modules or Lyca `import` in v0. Optional typed `extern python` declarations can call CPython modules, and `--target python` can export typed Lyca functions.
 
 ## Which LLVM do I need?
 
-You need `clang` on `PATH`. The compiler writes a `.ll` file and runs `clang file.ll -o out`. `llc` is not required. Apple Clang and LLVM Clang both work.
+You need `clang` on `PATH`. The compiler writes a `.ll` file and runs `clang file.ll -O2 -o out` by default. `llc` is not required. Apple Clang and LLVM Clang both work. Use `--opt 0` for faster debug builds.
 
 ## How do I see the IR?
 

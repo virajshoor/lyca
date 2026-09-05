@@ -84,9 +84,9 @@ echo $?
 `lyca build file.lyca -o output` does two things:
 
 1. Writes LLVM IR to `output.ll` (same path as the binary, with `.ll` appended).
-2. Invokes `clang output.ll -o output`.
+2. Invokes `clang output.ll -O2 -o output`.
 
-If type checking fails, nothing is written. Errors look like:
+Native builds default to `--opt 2`; use `--opt 0` for faster debug builds. Small C runtime support is linked only when needed. Builds stage output in a temporary directory; a failed clang invocation preserves the existing executable. If type checking fails, nothing is written. Errors look like:
 
 ```
 error[LYC207]: type mismatch: expected i32, found bool
@@ -99,3 +99,7 @@ error[LYC207]: type mismatch: expected i32, found bool
 ```
 
 Fix the source and rebuild. There is no REPL in v0.
+
+## Optional Python builds
+
+GIL-enabled CPython 3.10+ with development headers is needed only for Python integration. `--target python -o build/kernels` generates an importable extension with the selected interpreter's suffix. Extension files do not require `main`. Use `--python PATH` to select a virtual environment. See [Python compatibility](python-compatibility.md).

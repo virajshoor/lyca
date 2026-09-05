@@ -1,497 +1,358 @@
-import { Expr, FnDecl, Stmt, TypeAst } from "../ast";
+import { Expr, FnDecl, Stmt } from "../ast";
 import { CompileError } from "../diagnostics";
-import { CheckedProgram, LycaType } from "../typechecker";
+import { CheckedProgram, LycaType, FnInfo, pythonType } from "../typechecker";
+
+const cmp: Record<string, [string, string]> = { "==": ["eq", "oeq"], "!=": ["ne", "une"], "<": ["slt", "olt"], ">": ["sgt", "ogt"], "<=": ["sle", "ole"], ">=": ["sge", "oge"] };
+const ops: Record<string, [string, string]> = { "+": ["add", "fadd"], "-": ["sub", "fsub"], "*": ["mul", "fmul"], "/": ["sdiv", "fdiv"], "%": ["srem", "srem"] };
+
+type Value = { ref: string; ty: LycaType };
+type Place = { ptr: string; ty: LycaType };
+
+export function irType(t: LycaType): string {
+  switch (t.kind) {
+    case "f32": return "float";
+    case "f64": return "double";
+    case "bool": return "i1";
+    case "string": return "%lyca.String";
+    case "ref": return "ptr";
+    case "array": return `[${t.size} x ${irType(t.element)}]`;
+    case "struct": return `%lyca.struct.${t.name}`;
+    default: return t.kind;
+  }
+}
 
 export function codegen(checked: CheckedProgram, filename: string): string {
   return new Emitter(checked, filename).emit();
 }
 
 class Emitter {
-  header: string[] = [];
-  strs: string[] = [];
+  strings: string[] = [];
+  stringPool = new Map<string, string>();
   body: string[] = [];
+  allocations: string[] = [];
+  locals = new Map<string, Place>();
   tmp = 0;
   lab = 0;
   terminated = false;
-  locals = new Map<string, { ptr: string; ir: string }>();
-  fnName = "";
 
-  constructor(
-    private checked: CheckedProgram,
-    private filename: string,
-  ) {}
+  constructor(private checked: CheckedProgram, private filename: string) {}
 
   emit(): string {
-    this.header.push(`; ModuleID = '${this.filename}'`);
-    this.header.push(`source_filename = "${this.filename}"`);
-    this.header.push("%String = type { ptr, i64 }");
+    const header = [
+      "; Lyca LLVM IR (host target)",
+      "%lyca.String = type { ptr, i64 }",
+      "declare void @lyca_fail(ptr, i32, i32) noreturn",
+      "declare i32 @lyca_print(ptr)",
+    ];
     for (const st of this.checked.structs.values()) {
-      this.header.push(`%${st.name} = type { ${st.fields.map((f) => this.irType(f.type)).join(", ")} }`);
+      header.push(`%lyca.struct.${st.name} = type { ${st.fields.map(f => irType(f.type)).join(", ")} }`);
     }
-    this.header.push("declare i32 @puts(ptr noundef)");
-    this.header.push("");
-    this.header.push("define i32 @print(%String %s) {");
-    this.header.push("entry:");
-    this.header.push("  %p = extractvalue %String %s, 0");
-    this.header.push("  %r = call i32 @puts(ptr %p)");
-    this.header.push("  ret i32 0");
-    this.header.push("}");
-    this.header.push("");
-    const fns: string[] = [];
+    for (const fn of this.checked.fns.values()) {
+      if (fn.pythonModule) header.push(`declare void @lyca_py_${fn.name}(${["ptr", "ptr", ...fn.params.map(() => "ptr")].join(", ")})`);
+    }
+    const bodies: string[] = [];
     for (const d of this.checked.ast.decls) {
-      if (d.kind === "fn") fns.push(this.emitFn(d));
+      if (d.kind !== "fn") continue;
+      bodies.push(this.emitFn(d));
+      const fn = this.checked.fns.get(d.name)!;
+      if (this.checked.target === "python" && !d.name.startsWith("_") && pythonType(fn.ret)) {
+        bodies.push(this.exportWrapper(fn));
+      }
     }
-    return [...this.header, ...fns, ...this.strs].join("\n") + "\n";
+    if (this.checked.target === "native") {
+      const hasPython = [...this.checked.fns.values()].some(f => f.pythonModule);
+      if (hasPython) bodies.push(this.exportWrapper(this.checked.fns.get("main")!));
+      else bodies.push("define i32 @main() {\nentry:\n  %r = call i32 @lyca.fn.main(ptr null)\n  ret i32 %r\n}");
+    }
+    return [...header, ...bodies, ...this.strings].join("\n\n") + "\n";
+  }
+
+  // Pointer-only boundary avoids platform-specific C aggregate calling conventions.
+  private exportWrapper(fn: FnInfo): string {
+    const args = fn.params.map((p, i) => `ptr %a${i}`);
+    const lines = [`define void @lyca_export_${fn.name}(${["ptr %ctx", "ptr %out", ...args].join(", ")}) {`, "entry:"];
+    const values = fn.params.map((p, i) => {
+      if (p.type.kind === "ref") return `ptr %a${i}`;
+      lines.push(`  %v${i} = load ${irType(p.type)}, ptr %a${i}`);
+      return `${irType(p.type)} %v${i}`;
+    });
+    lines.push(`  %r = call ${irType(fn.ret)} @lyca.fn.${fn.name}(${["ptr %ctx", ...values].join(", ")})`, `  store ${irType(fn.ret)} %r, ptr %out`, "  ret void", "}");
+    return lines.join("\n");
   }
 
   private emitFn(fn: FnDecl): string {
-    const info = this.checked.fns.get(fn.name)!;
-    this.fnName = fn.name;
     this.tmp = 0;
     this.lab = 0;
     this.terminated = false;
     this.locals = new Map();
     this.body = [];
-    const params = info.params.map((p, i) => `${this.irType(p.type)} %p${i}`).join(", ");
-    const out = [`define ${this.irType(info.ret)} @${fn.name}(${params}) {`, "entry:"];
-    info.params.forEach((p, i) => {
-      const ptr = this.alloca(this.irType(p.type));
-      this.store(this.irType(p.type), `%p${i}`, ptr);
-      this.locals.set(p.name, { ptr, ir: this.irType(p.type) });
-    });
-    for (const s of fn.body) this.emitStmt(s);
-    if (!this.terminated) this.body.push(`  ret ${this.irType(info.ret)} ${this.zero(info.ret)}`);
-    out.push(...this.body, "}", "");
-    return out.join("\n");
+    this.allocations = [];
+    const info = this.checked.fns.get(fn.name)!;
+    const args = info.params.map((p, i) => `${irType(p.type)} %p${i}`);
+    for (const [i, p] of info.params.entries()) {
+      const ptr = this.alloca(p.type);
+      this.store(p.type, `%p${i}`, ptr);
+      this.locals.set(p.name, { ptr, ty: p.type });
+    }
+    for (const stmt of fn.body) this.emitStmt(stmt);
+    if (!this.terminated) this.body.push("  unreachable");
+    return [`define internal ${irType(info.ret)} @lyca.fn.${fn.name}(${["ptr %ctx", ...args].join(", ")}) {`, "entry:", ...this.allocations, ...this.body, "}"].join("\n");
+  }
+
+  private emitBlock(stmts: Stmt[]) {
+    const outer = stmts.some(s => s.kind === "let") ? new Map(this.locals) : this.locals;
+    for (const stmt of stmts) this.emitStmt(stmt);
+    this.locals = outer;
   }
 
   private emitStmt(stmt: Stmt) {
     if (this.terminated) return;
     switch (stmt.kind) {
       case "let": {
-        const ty = astType(stmt.type);
-        const ir = this.irType(ty);
-        const ptr = this.alloca(ir);
-        const v = this.emitExpr(stmt.value, ty);
-        this.store(ir, v.ref, ptr);
-        this.locals.set(stmt.name, { ptr, ir });
+        const ty = this.checked.types.get(stmt.type)!;
+        const value = this.emitExpr(stmt.value, ty);
+        const ptr = this.alloca(ty);
+        this.store(ty, value.ref, ptr);
+        this.locals.set(stmt.name, { ptr, ty });
         break;
       }
       case "assign": {
-        const dest = this.lvalue(stmt.target);
-        const v = this.emitExpr(stmt.value, dest.ty);
-        this.store(dest.ir, v.ref, dest.ptr);
+        const dest = this.placeExpr(stmt.target);
+        const value = this.emitExpr(stmt.value, dest.ty);
+        this.store(dest.ty, value.ref, dest.ptr);
         break;
       }
       case "return": {
-        const ret = this.checked.fns.get(this.fnName)!.ret;
-        const v = this.emitExpr(stmt.value, ret);
-        this.body.push(`  ret ${this.irType(ret)} ${v.ref}`);
+        const value = this.emitExpr(stmt.value);
+        this.body.push(`  ret ${irType(value.ty)} ${value.ref}`);
         this.terminated = true;
         break;
       }
       case "if": {
-        const t = this.label("then");
-        const f = this.label("else");
-        const end = this.label("endif");
-        const c = this.emitExpr(stmt.cond, { kind: "bool" });
-        const hasElse = stmt.else_ !== null;
-        this.body.push(`  br i1 ${c.ref}, label %${t}, label %${hasElse ? f : end}`);
-        this.place(t);
-        for (const s of stmt.then) this.emitStmt(s);
-        const thenTerm = this.terminated;
-        if (!thenTerm) this.body.push(`  br label %${end}`);
-        let elseTerm = true;
-        if (hasElse) {
-          this.place(f);
-          for (const s of stmt.else_!) this.emitStmt(s);
-          elseTerm = this.terminated;
-          if (!elseTerm) this.body.push(`  br label %${end}`);
-        } else {
-          elseTerm = false;
-        }
-        if (thenTerm && elseTerm) {
-          this.terminated = true;
-          return;
+        const then = this.label("then"), end = this.label("endif");
+        const otherwise = stmt.else_ ? this.label("else") : end;
+        const cond = this.emitExpr(stmt.cond);
+        this.body.push(`  br i1 ${cond.ref}, label %${then}, label %${otherwise}`);
+        this.place(then);
+        this.emitBlock(stmt.then);
+        const thenEnds = this.terminated;
+        if (!thenEnds) this.body.push(`  br label %${end}`);
+        if (stmt.else_) {
+          this.place(otherwise);
+          this.emitBlock(stmt.else_);
+          if (!this.terminated) this.body.push(`  br label %${end}`);
+          if (thenEnds && this.terminated) break;
         }
         this.place(end);
         break;
       }
       case "while": {
-        const h = this.label("wh");
-        const b = this.label("wbody");
-        const e = this.label("wend");
-        this.body.push(`  br label %${h}`);
-        this.place(h);
-        const c = this.emitExpr(stmt.cond, { kind: "bool" });
-        this.body.push(`  br i1 ${c.ref}, label %${b}, label %${e}`);
-        this.place(b);
-        for (const s of stmt.body) this.emitStmt(s);
-        if (!this.terminated) this.body.push(`  br label %${h}`);
-        this.place(e);
+        const head = this.label("while"), body = this.label("body"), end = this.label("endwhile");
+        this.body.push(`  br label %${head}`);
+        this.place(head);
+        const cond = this.emitExpr(stmt.cond);
+        this.body.push(`  br i1 ${cond.ref}, label %${body}, label %${end}`);
+        this.place(body);
+        this.emitBlock(stmt.body);
+        if (!this.terminated) this.body.push(`  br label %${head}`);
+        this.place(end);
         break;
       }
       case "for": {
-        const ptr = this.alloca("i32");
-        const start = this.emitExpr(stmt.start, { kind: "i32" });
-        this.store("i32", start.ref, ptr);
-        this.locals.set(stmt.name, { ptr, ir: "i32" });
-        const endv = this.emitExpr(stmt.end, { kind: "i32" });
-        const h = this.label("forh");
-        const b = this.label("forb");
-        const e = this.label("fore");
-        this.body.push(`  br label %${h}`);
-        this.place(h);
-        const i = this.t();
-        this.body.push(`  ${i} = load i32, ptr ${ptr}`);
-        const cmp = this.t();
-        this.body.push(`  ${cmp} = icmp slt i32 ${i}, ${endv.ref}`);
-        this.body.push(`  br i1 ${cmp}, label %${b}, label %${e}`);
-        this.place(b);
-        for (const s of stmt.body) this.emitStmt(s);
+        const outer = new Map(this.locals);
+        // Both bounds use the enclosing scope and are evaluated once.
+        const start = this.emitExpr(stmt.start), bound = this.emitExpr(stmt.end);
+        const ty: LycaType = { kind: "i32" };
+        const ptr = this.alloca(ty);
+        this.store(ty, start.ref, ptr);
+        this.locals.set(stmt.name, { ptr, ty });
+        const head = this.label("for"), body = this.label("body"), end = this.label("endfor");
+        this.body.push(`  br label %${head}`);
+        this.place(head);
+        const iv = this.load({ ptr, ty });
+        const cmp = this.instruction(`icmp slt i32 ${iv.ref}, ${bound.ref}`);
+        this.body.push(`  br i1 ${cmp}, label %${body}, label %${end}`);
+        this.place(body);
+        this.emitBlock(stmt.body);
         if (!this.terminated) {
-          const iv = this.t();
-          this.body.push(`  ${iv} = load i32, ptr ${ptr}`);
-          const n = this.t();
-          this.body.push(`  ${n} = add nsw i32 ${iv}, 1`);
-          this.store("i32", n, ptr);
-          this.body.push(`  br label %${h}`);
+          const current = this.load({ ptr, ty });
+          const value = this.instruction(`add i32 ${current.ref}, 1`);
+          this.store(ty, value, ptr);
+          this.body.push(`  br label %${head}`);
         }
-        this.place(e);
-        this.locals.delete(stmt.name);
+        this.place(end);
+        this.locals = outer;
         break;
       }
-      case "expr":
-        this.emitExpr(stmt.expr, null);
-        break;
+      case "expr": this.emitExpr(stmt.expr); break;
     }
   }
 
-  private emitExpr(expr: Expr, expected: LycaType | null): { ref: string; ir: string; ty: LycaType } {
+  private emitExpr(expr: Expr, expected?: LycaType): Value {
+    if (expected?.kind === "ref") {
+      if (expr.kind === "borrow") return { ref: this.placeExpr(expr.expr).ptr, ty: expected };
+      if (expr.kind === "name" && this.locals.get(expr.name)?.ty.kind === "ref") return this.load(this.locals.get(expr.name)!);
+      return { ref: this.placeExpr(expr).ptr, ty: expected };
+    }
+    const ty = this.checked.exprTypes.get(expr);
+    if (!ty) this.ice("expression lacks checked type");
     switch (expr.kind) {
-      case "int": {
-        const ty: LycaType = expected?.kind === "i64" ? { kind: "i64" } : { kind: "i32" };
-        return { ref: expr.raw, ir: this.irType(ty), ty };
-      }
+      case "int": return { ref: expr.raw[0] === "0" ? BigInt(expr.raw).toString() : expr.raw, ty };
       case "float": {
-        const ty: LycaType = expected?.kind === "f32" ? { kind: "f32" } : { kind: "f64" };
-        return { ref: Number(expr.raw).toExponential(16), ir: this.irType(ty), ty };
+        const b = Buffer.alloc(8);
+        b.writeDoubleBE(ty.kind === "f32" ? Math.fround(Number(expr.raw)) : Number(expr.raw));
+        return { ref: `0x${b.toString("hex")}`, ty };
       }
-      case "bool":
-        return { ref: expr.value ? "true" : "false", ir: "i1", ty: { kind: "bool" } };
+      case "bool": return { ref: expr.value ? "true" : "false", ty };
       case "string": {
-        const buf = Buffer.from(expr.value, "utf8");
-        const bytes = [...buf, 0];
-        const name = `@str.${this.strs.length}`;
-        const hex = bytes.map((b) => "\\" + b.toString(16).padStart(2, "0")).join("");
-        this.strs.push(`${name} = private unnamed_addr constant [${bytes.length} x i8] c"${hex}"`);
-        const s0 = this.t();
-        this.body.push(`  ${s0} = getelementptr [${bytes.length} x i8], ptr ${name}, i32 0, i32 0`);
-        const s1 = this.t();
-        this.body.push(`  ${s1} = insertvalue %String undef, ptr ${s0}, 0`);
-        const s2 = this.t();
-        this.body.push(`  ${s2} = insertvalue %String ${s1}, i64 ${buf.length}, 1`);
-        return { ref: s2, ir: "%String", ty: { kind: "string" } };
+        let global = this.stringPool.get(expr.value);
+        const bytes = Buffer.from(expr.value, "utf8");
+        if (!global) {
+          global = `@lyca.str.${this.strings.length}`;
+          const hex = [...bytes, 0].map(b => "\\" + b.toString(16).padStart(2, "0")).join("");
+          this.strings.push(`${global} = private unnamed_addr constant [${bytes.length + 1} x i8] c"${hex}"`);
+          this.stringPool.set(expr.value, global);
+        }
+        return { ref: `{ ptr ${global}, i64 ${bytes.length} }`, ty };
       }
       case "name": {
-        const loc = this.requireLocal(expr.name);
-        const r = this.t();
-        this.body.push(`  ${r} = load ${loc.ir}, ptr ${loc.ptr}`);
-        const ty = irToType(loc.ir);
-        return { ref: r, ir: loc.ir, ty };
+        const local = this.locals.get(expr.name);
+        if (!local) this.ice(`unbound ${expr.name}`);
+        return this.load(local);
       }
+      case "borrow": return { ref: this.placeExpr(expr.expr).ptr, ty };
       case "unary": {
-        if (expr.op === "not") {
-          const v = this.emitExpr(expr.expr, { kind: "bool" });
-          const r = this.t();
-          this.body.push(`  ${r} = xor i1 ${v.ref}, true`);
-          return { ref: r, ir: "i1", ty: { kind: "bool" } };
-        }
-        const v = this.emitExpr(expr.expr, expected);
-        const r = this.t();
-        if (v.ir === "float" || v.ir === "double") this.body.push(`  ${r} = fneg ${v.ir} ${v.ref}`);
-        else this.body.push(`  ${r} = sub ${v.ir} 0, ${v.ref}`);
-        return { ref: r, ir: v.ir, ty: v.ty };
+        const v = this.emitExpr(expr.expr);
+        const op = expr.op === "not" ? `xor i1 ${v.ref}, true` : ty.kind === "f32" || ty.kind === "f64" ? `fneg ${irType(ty)} ${v.ref}` : `sub ${irType(ty)} 0, ${v.ref}`;
+        return { ref: this.instruction(op), ty };
       }
-      case "borrow":
-        return this.emitExpr(expr.expr, expected?.kind === "ref" ? expected.inner : expected);
-      case "binary":
-        return this.emitBinary(expr, expected);
+      case "binary": return this.emitBinary(expr, ty);
       case "call": {
         const fn = this.checked.fns.get(expr.callee)!;
-        const args = expr.args.map((a, i) => {
-          const want = fn.params[i]!.type;
-          const v = this.emitExpr(a, want.kind === "ref" ? want.inner : want);
-          return `${this.irType(want)} ${v.ref}`;
-        });
-        const r = this.t();
-        this.body.push(`  ${r} = call ${this.irType(fn.ret)} @${fn.name}(${args.join(", ")})`);
-        return { ref: r, ir: this.irType(fn.ret), ty: fn.ret };
-      }
-      case "index": {
-        const ptr = this.asPtr(expr.target);
-        const idx = this.emitExpr(expr.index, { kind: "i32" });
-        const elemIr = elemIrOf(ptr.ir);
-        const gep = this.t();
-        this.body.push(`  ${gep} = getelementptr ${ptr.ir}, ptr ${ptr.ptr}, i32 0, i32 ${idx.ref}`);
-        const r = this.t();
-        this.body.push(`  ${r} = load ${elemIr}, ptr ${gep}`);
-        return { ref: r, ir: elemIr, ty: irToType(elemIr) };
-      }
-      case "field": {
-        const st = this.structOf(expr.target);
-        const fi = st.fields.findIndex((f) => f.name === expr.name);
-        const field = st.fields[fi]!;
-        const lv = this.tryLvalue(expr.target);
-        if (lv) {
-          const gep = this.t();
-          this.body.push(`  ${gep} = getelementptr %${st.name}, ptr ${lv.ptr}, i32 0, i32 ${fi}`);
-          const r = this.t();
-          this.body.push(`  ${r} = load ${this.irType(field.type)}, ptr ${gep}`);
-          return { ref: r, ir: this.irType(field.type), ty: field.type };
+        const args = expr.args.map((a, i) => this.emitExpr(a, fn.params[i]!.type));
+        if (fn.name === "print") return { ref: this.instruction(`call i32 @lyca_print(ptr ${args[0]!.ref})`), ty };
+        if (fn.pythonModule) {
+          const out = this.alloca(fn.ret);
+          const pointers = args.map((a, i) => {
+            if (fn.params[i]!.type.kind === "ref") return `ptr ${a.ref}`;
+            const ptr = this.alloca(a.ty);
+            this.store(a.ty, a.ref, ptr);
+            return `ptr ${ptr}`;
+          });
+          this.body.push(`  call void @lyca_py_${fn.name}(${["ptr %ctx", `ptr ${out}`, ...pointers].join(", ")})`);
+          return this.load({ ptr: out, ty });
         }
-        const obj = this.emitExpr(expr.target, { kind: "struct", name: st.name });
-        const r = this.t();
-        this.body.push(`  ${r} = extractvalue %${st.name} ${obj.ref}, ${fi}`);
-        return { ref: r, ir: this.irType(field.type), ty: field.type };
+        return { ref: this.instruction(`call ${irType(ty)} @lyca.fn.${fn.name}(${["ptr %ctx", ...args.map(a => `${irType(a.ty)} ${a.ref}`)].join(", ")})`), ty };
       }
+      case "index": case "field": return this.load(this.placeExpr(expr));
       case "struct": {
         const st = this.checked.structs.get(expr.name)!;
-        const ptr = this.alloca(`%${expr.name}`);
-        for (const f of expr.fields) {
-          const fi = st.fields.findIndex((x) => x.name === f.name);
-          const v = this.emitExpr(f.value, st.fields[fi]!.type);
-          const gep = this.t();
-          this.body.push(`  ${gep} = getelementptr %${expr.name}, ptr ${ptr}, i32 0, i32 ${fi}`);
-          this.store(this.irType(st.fields[fi]!.type), v.ref, gep);
+        let value = "undef";
+        for (const field of expr.fields) {
+          const index = st.fields.findIndex(f => f.name === field.name);
+          const v = this.emitExpr(field.value);
+          value = this.instruction(`insertvalue ${irType(ty)} ${value}, ${irType(v.ty)} ${v.ref}, ${index}`);
         }
-        const r = this.t();
-        this.body.push(`  ${r} = load %${expr.name}, ptr ${ptr}`);
-        return { ref: r, ir: `%${expr.name}`, ty: { kind: "struct", name: expr.name } };
+        return { ref: value, ty };
       }
       case "array": {
-        const n = expected?.kind === "array" ? expected.size : expr.elements.length;
-        const elemTy: LycaType = expected?.kind === "array" ? expected.element : { kind: "i32" };
-        const ir = `[${n} x ${this.irType(elemTy)}]`;
-        const ptr = this.alloca(ir);
-        expr.elements.forEach((el, i) => {
-          const v = this.emitExpr(el, elemTy);
-          const gep = this.t();
-          this.body.push(`  ${gep} = getelementptr ${ir}, ptr ${ptr}, i32 0, i32 ${i}`);
-          this.store(this.irType(elemTy), v.ref, gep);
-        });
-        const r = this.t();
-        this.body.push(`  ${r} = load ${ir}, ptr ${ptr}`);
-        return { ref: r, ir, ty: { kind: "array", element: elemTy, size: n } };
+        let value = "zeroinitializer";
+        for (const [i, e] of expr.elements.entries()) {
+          const v = this.emitExpr(e);
+          value = this.instruction(`insertvalue ${irType(ty)} ${value}, ${irType(v.ty)} ${v.ref}, ${i}`);
+        }
+        return { ref: value, ty };
       }
     }
   }
 
-  private emitBinary(expr: Extract<Expr, { kind: "binary" }>, expected: LycaType | null) {
+  private emitBinary(expr: Extract<Expr, { kind: "binary" }>, ty: LycaType): Value {
     const op = expr.op;
+    const l = this.emitExpr(expr.left);
     if (op === "and" || op === "or") {
-      const res = this.alloca("i1");
-      const l = this.emitExpr(expr.left, { kind: "bool" });
-      this.store("i1", l.ref, res);
-      const rhs = this.label(op + "rhs");
-      const done = this.label(op + "done");
-      if (op === "and") this.body.push(`  br i1 ${l.ref}, label %${rhs}, label %${done}`);
-      else this.body.push(`  br i1 ${l.ref}, label %${done}, label %${rhs}`);
+      const slot = this.alloca(ty);
+      this.store(ty, l.ref, slot);
+      const rhs = this.label("rhs"), end = this.label("boolend");
+      this.body.push(`  br i1 ${l.ref}, label %${op === "and" ? rhs : end}, label %${op === "and" ? end : rhs}`);
       this.place(rhs);
-      const r = this.emitExpr(expr.right, { kind: "bool" });
-      this.store("i1", r.ref, res);
-      this.body.push(`  br label %${done}`);
-      this.place(done);
-      const v = this.t();
-      this.body.push(`  ${v} = load i1, ptr ${res}`);
-      return { ref: v, ir: "i1", ty: { kind: "bool" } as LycaType };
+      this.store(ty, this.emitExpr(expr.right).ref, slot);
+      this.body.push(`  br label %${end}`);
+      this.place(end);
+      return this.load({ ptr: slot, ty });
     }
-    const hint = expected && isArith(expected) ? expected : null;
-    const l = this.emitExpr(expr.left, hint);
-    const r = this.emitExpr(expr.right, l.ty);
-    const cmp: Record<string, [string, string]> = {
-      "==": ["eq", "oeq"],
-      "!=": ["ne", "one"],
-      "<": ["slt", "olt"],
-      ">": ["sgt", "ogt"],
-      "<=": ["sle", "ole"],
-      ">=": ["sge", "oge"],
-    };
-    if (cmp[op]) {
-      const v = this.t();
-      const fp = l.ir === "float" || l.ir === "double";
-      this.body.push(`  ${v} = ${fp ? "fcmp" : "icmp"} ${fp ? cmp[op]![1] : cmp[op]![0]} ${l.ir} ${l.ref}, ${r.ref}`);
-      return { ref: v, ir: "i1", ty: { kind: "bool" } as LycaType };
+    const r = this.emitExpr(expr.right);
+    const fp = l.ty.kind === "f32" || l.ty.kind === "f64";
+    const ir = irType(l.ty);
+
+    if (cmp[op]) return { ref: this.instruction(`${fp ? "fcmp" : "icmp"} ${cmp[op]![fp ? 1 : 0]} ${ir} ${l.ref}, ${r.ref}`), ty };
+    if (!fp && (op === "/" || op === "%") && !(expr.right.kind === "int" && Number(expr.right.raw) > 0)) {
+      const zero = this.instruction(`icmp eq ${ir} ${r.ref}, 0`);
+      const min = l.ty.kind === "i64" ? "-9223372036854775808" : "-2147483648";
+      const a = this.instruction(`icmp eq ${ir} ${l.ref}, ${min}`);
+      const b = this.instruction(`icmp eq ${ir} ${r.ref}, -1`);
+      const overflow = this.instruction(`and i1 ${a}, ${b}`);
+      const bad = this.instruction(`or i1 ${zero}, ${overflow}`);
+      this.guard(bad, 2, expr.span.line);
     }
-    const fp = l.ir === "float" || l.ir === "double";
-    const map: Record<string, [string, string]> = {
-      "+": ["add", "fadd"],
-      "-": ["sub", "fsub"],
-      "*": ["mul", "fmul"],
-      "/": ["sdiv", "fdiv"],
-      "%": ["srem", "srem"],
-    };
-    const v = this.t();
-    this.body.push(`  ${v} = ${fp ? map[op]![1] : map[op]![0]} ${l.ir} ${l.ref}, ${r.ref}`);
-    return { ref: v, ir: l.ir, ty: l.ty };
+
+    return { ref: this.instruction(`${ops[op]![fp ? 1 : 0]} ${ir} ${l.ref}, ${r.ref}`), ty };
   }
 
-  private asPtr(expr: Expr): { ptr: string; ir: string } {
-    const lv = this.tryLvalue(expr);
-    if (lv) return lv;
-    const v = this.emitExpr(expr, null);
-    const ptr = this.alloca(v.ir);
-    this.store(v.ir, v.ref, ptr);
-    return { ptr, ir: v.ir };
-  }
-
-  private structOf(expr: Expr) {
+  private placeExpr(expr: Expr): Place {
     if (expr.kind === "name") {
-      const loc = this.requireLocal(expr.name);
-      const name = loc.ir.replace(/^%/, "");
-      return this.checked.structs.get(name)!;
-    }
-    if (expr.kind === "struct") return this.checked.structs.get(expr.name)!;
-    if (expr.kind === "call") {
-      const ret = this.checked.fns.get(expr.callee)!.ret;
-      if (ret.kind === "struct") return this.checked.structs.get(ret.name)!;
-    }
-    const first = [...this.checked.structs.values()][0];
-    if (!first) this.ice("field access without struct");
-    return first;
-  }
-
-  private lvalue(expr: Expr) {
-    const v = this.tryLvalue(expr);
-    if (!v) this.ice("not an lvalue");
-    return v;
-  }
-
-  private tryLvalue(expr: Expr): { ptr: string; ir: string; ty: LycaType } | null {
-    if (expr.kind === "name") {
-      const loc = this.locals.get(expr.name);
-      if (!loc) return null;
-      return { ptr: loc.ptr, ir: loc.ir, ty: irToType(loc.ir) };
-    }
-    if (expr.kind === "index") {
-      const base = this.asPtr(expr.target);
-      const idx = this.emitExpr(expr.index, { kind: "i32" });
-      const gep = this.t();
-      this.body.push(`  ${gep} = getelementptr ${base.ir}, ptr ${base.ptr}, i32 0, i32 ${idx.ref}`);
-      const elem = elemIrOf(base.ir);
-      return { ptr: gep, ir: elem, ty: irToType(elem) };
+      const local = this.locals.get(expr.name);
+      if (!local) this.ice(`unbound ${expr.name}`);
+      if (local.ty.kind === "ref") return { ptr: this.load(local).ref, ty: local.ty.inner };
+      return local;
     }
     if (expr.kind === "field") {
-      const st = this.structOf(expr.target);
-      const fi = st.fields.findIndex((f) => f.name === expr.name);
-      const base = this.tryLvalue(expr.target) ?? this.asPtr(expr.target);
-      const gep = this.t();
-      this.body.push(`  ${gep} = getelementptr %${st.name}, ptr ${base.ptr}, i32 0, i32 ${fi}`);
-      const ir = this.irType(st.fields[fi]!.type);
-      return { ptr: gep, ir, ty: st.fields[fi]!.type };
+      const base = this.placeExpr(expr.target);
+      if (base.ty.kind !== "struct") this.ice("field base is not a struct");
+      const st = this.checked.structs.get(base.ty.name)!;
+      const index = st.fields.findIndex(f => f.name === expr.name);
+      return { ptr: this.instruction(`getelementptr ${irType(base.ty)}, ptr ${base.ptr}, i32 0, i32 ${index}`), ty: st.fields[index]!.type };
     }
-    return null;
-  }
-
-  private requireLocal(name: string) {
-    const loc = this.locals.get(name);
-    if (!loc) this.ice(`unbound ${name}`);
-    return loc;
-  }
-
-  private irType(t: LycaType): string {
-    switch (t.kind) {
-      case "i32":
-        return "i32";
-      case "i64":
-        return "i64";
-      case "f32":
-        return "float";
-      case "f64":
-        return "double";
-      case "bool":
-        return "i1";
-      case "string":
-        return "%String";
-      case "array":
-        return `[${t.size} x ${this.irType(t.element)}]`;
-      case "struct":
-        return `%${t.name}`;
-      case "ref":
-        return this.irType(t.inner);
+    if (expr.kind === "index") {
+      const base = this.placeExpr(expr.target);
+      if (base.ty.kind !== "array") this.ice("index base is not an array");
+      const index = this.emitExpr(expr.index);
+      if (expr.index.kind !== "int") {
+        const bad = this.instruction(`icmp uge i32 ${index.ref}, ${base.ty.size}`);
+        this.guard(bad, 1, expr.span.line);
+      }
+      // Signed extension is explicit; the guard already excludes negative indices.
+      const wide = this.instruction(`sext i32 ${index.ref} to i64`);
+      return { ptr: this.instruction(`getelementptr ${irType(base.ty)}, ptr ${base.ptr}, i32 0, i64 ${wide}`), ty: base.ty.element };
     }
+    const value = this.emitExpr(expr);
+    const ptr = this.alloca(value.ty);
+    this.store(value.ty, value.ref, ptr);
+    return { ptr, ty: value.ty };
   }
 
-  private zero(t: LycaType): string {
-    if (t.kind === "f32" || t.kind === "f64") return "0.000000e+00";
-    if (t.kind === "bool") return "false";
-    if (t.kind === "string") return "zeroinitializer";
-    if (t.kind === "struct" || t.kind === "array" || t.kind === "ref") return "zeroinitializer";
-    return "0";
+  private guard(bad: string, code: number, line: number) {
+    const error = this.label("error"), ok = this.label("ok");
+    this.body.push(`  br i1 ${bad}, label %${error}, label %${ok}`);
+    this.place(error);
+    this.body.push(`  call void @lyca_fail(ptr %ctx, i32 ${code}, i32 ${line})`, "  unreachable");
+    this.place(ok);
   }
 
-  private alloca(ir: string): string {
-    const p = this.t();
-    this.body.push(`  ${p} = alloca ${ir}`);
-    return p;
+  private load(place: Place): Value {
+    return { ref: this.instruction(`load ${irType(place.ty)}, ptr ${place.ptr}`), ty: place.ty };
   }
 
-  private store(ir: string, val: string, ptr: string) {
-    this.body.push(`  store ${ir} ${val}, ptr ${ptr}`);
+  private alloca(ty: LycaType): string {
+    const ptr = `%t${this.tmp++}`;
+    this.allocations.push(`  ${ptr} = alloca ${irType(ty)}`);
+    return ptr;
   }
 
-  private t(): string {
-    return `%t${this.tmp++}`;
+  private store(ty: LycaType, value: string, ptr: string) { this.body.push(`  store ${irType(ty)} ${value}, ptr ${ptr}`); }
+  private instruction(op: string): string { const r = `%t${this.tmp++}`; this.body.push(`  ${r} = ${op}`); return r; }
+  private label(prefix: string): string { return `${prefix}${this.lab++}`; }
+  private place(label: string) { this.body.push(`${label}:`); this.terminated = false; }
+  private ice(message: string): never {
+    throw new CompileError("LYC301", `internal compiler error: ${message}`, this.checked.ast.span, this.filename, "", "this is a compiler bug");
   }
-
-  private label(p: string): string {
-    return `${p}${this.lab++}`;
-  }
-
-  private place(name: string) {
-    this.body.push(`${name}:`);
-    this.terminated = false;
-  }
-
-  private ice(msg: string): never {
-    throw new CompileError(
-      "LYC301",
-      `internal compiler error: ${msg}`,
-      { line: 1, col: 1, endLine: 1, endCol: 1 },
-      this.filename,
-      "",
-      "this is a compiler bug",
-    );
-  }
-}
-
-function isArith(t: LycaType): boolean {
-  return t.kind === "i32" || t.kind === "i64" || t.kind === "f32" || t.kind === "f64";
-}
-
-function elemIrOf(arr: string): string {
-  const m = /^\[(\d+) x (.+)\]$/.exec(arr);
-  return m ? m[2]! : "i32";
-}
-
-function irToType(ir: string): LycaType {
-  if (ir === "i32") return { kind: "i32" };
-  if (ir === "i64") return { kind: "i64" };
-  if (ir === "float") return { kind: "f32" };
-  if (ir === "double") return { kind: "f64" };
-  if (ir === "i1") return { kind: "bool" };
-  if (ir === "%String") return { kind: "string" };
-  const arr = /^\[(\d+) x (.+)\]$/.exec(ir);
-  if (arr) return { kind: "array", element: irToType(arr[2]!), size: Number(arr[1]) };
-  if (ir.startsWith("%")) return { kind: "struct", name: ir.slice(1) };
-  return { kind: "i32" };
-}
-
-function astType(t: TypeAst): LycaType {
-  if (t.kind === "named") {
-    if (["i32", "i64", "f32", "f64", "bool", "string"].includes(t.name)) return { kind: t.name as "i32" };
-    return { kind: "struct", name: t.name };
-  }
-  if (t.kind === "array") return { kind: "array", element: astType(t.element), size: t.size };
-  return { kind: "ref", inner: astType(t.inner) };
 }

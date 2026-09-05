@@ -7,8 +7,9 @@ Lyca's syntax looks like Python (indentation, `def`, `if`, `for`), but it does *
 - Every `let`, parameter, and return type is annotated. There is no inference beyond literals taking the type of their context.
 - No implicit conversions, ever. `i32 + i64` is a compile error. There are no casts.
 - Conditions must be `bool`. There is no truthiness.
-- No garbage collector. `string`, arrays, and structs are *move* types with a borrow checker.
-- The only builtin is `print(s: &string) -> i32`. There is no `len`, `str`, `range`, `input`, no string formatting, no string concatenation, no standard library, no imports, no modules. One file per program.
+- No garbage collector in native core. `string`, arrays, and structs are *move* types with conservative borrow checking.
+- The only native builtin is `print(s: &string) -> i32`. Native Lyca has no `len`, `str`, `range`, `input`, string formatting, string concatenation, standard library, or Lyca imports. One file per native program.
+- Optional GIL-enabled CPython integration supports typed `extern python "module" def name(...) -> T` calls and `--target python` extensions. Boundaries support scalars, strings, and fixed numeric/bool arrays; arrays and strings copy.
 
 ## Build and run
 
@@ -122,7 +123,7 @@ def main() -> i32:
     return s + j + classify(0)
 ```
 
-`for i in start..end:` iterates the half-open interval `[start, end)` as `i32`; the loop variable is a fresh mutable `i32` local scoped to the body. There is no `break` or `continue` — restructure with `if` or a helper function.
+`for i in start..end:` iterates the half-open interval `[start, end)` as `i32`; the loop variable is a fresh immutable `i32` local scoped to the body. There is no `break` or `continue` — restructure with `if` or a helper function.
 
 ## Operators
 
@@ -194,7 +195,20 @@ def main() -> i32:
     return 0
 ```
 
-There is no `&mut`. Do not return `&T` from functions you write; return owned values. Reading a Copy field out of a struct does not move it; reading a move-typed field moves the whole struct.
+There is no `&mut`. Returning `&T`, nested references, reference fields, and reference arrays is rejected (`LYC224`). Do not return borrows; return owned values. Reading a Copy field out of a struct does not move it; reading a move-typed field moves the whole struct. Moves from outer bindings inside loops are rejected (`LYC230`).
+
+## Python integration
+
+```lyca
+extern python "math" def sqrt(x: f64) -> f64
+
+def main() -> i32:
+    if sqrt(81.0) == 9.0:
+        return 0
+    return 1
+```
+
+Use `--target python` to export public local functions as a CPython extension. Supported boundary values: `i32`, `i64`, `f32`, `f64`, `bool`, `string`, and fixed one-dimensional arrays of numeric/bool values. Conversion validates ranges and array lengths. Python calls hold the GIL; strings and arrays copy. Python exceptions propagate through extensions and print before embedded executables exit 1. General Python objects, methods, keyword arguments, zero-copy NumPy buffers, and Windows packaging are not part of v1.
 
 ## Never generate
 
@@ -209,7 +223,7 @@ There is no `&mut`. Do not return `&T` from functions you write; return owned va
 | `pass` | no empty blocks (`LYC104`) | put a real statement in the block |
 | `break` / `continue` | not in the language | restructure with `if` or a helper function |
 | `i32` value mixed with `i64` | no coercion, no casts (`LYC221`) | one integer width throughout the expression |
-| `str(n)`, `len(a)`, `f"{x}"`, `import`, methods, classes | no stdlib, no modules, no methods in v0 | free functions taking `T` or `&T`; array length comes from the type `[T; N]` |
+| `str(n)`, `len(a)`, `f"{x}"`, Lyca `import`, methods, classes | no native stdlib/modules/methods in v0 | free functions taking `T` or `&T`; array length comes from the type `[T; N]`; use typed `extern python` for Python modules |
 | `&p.x` / `&a[0]` / `&f()` | `&` needs a plain variable name (`LYC222`) | bind to a `let` first, then borrow that name |
 | `return r` where `r: &T` borrows a local | dangling reference | return owned values only |
 | tabs | `LYC003` | spaces only |
@@ -339,4 +353,4 @@ def main() -> i32:
 4. Same numeric type on both sides of every operator; no casts exist.
 5. Numbers are never printed — returned from `main` (exit code `0..255`) or replaced by a message plus `return 0`.
 6. `string`, arrays, and structs move on use as a value; pass `&T` when the caller keeps the value.
-7. Spaces only, one file, no imports, no stdlib beyond `print`.
+7. Spaces only; native programs are one file with no Lyca imports or stdlib beyond `print`. Python targets may use typed `extern python` declarations.

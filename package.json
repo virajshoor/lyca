@@ -2,19 +2,22 @@
   "name": "lyca",
   "version": "0.1.0",
   "description": "A Python-like, statically typed language that compiles to native code via LLVM",
-  "author": "Viraj Shoor",
   "license": "MIT",
   "bin": {
     "lyca": "./dist/cli/index.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-runtime.cjs",
     "test": "vitest run",
-    "lyca": "node dist/cli/index.js"
+    "lyca": "node dist/cli/index.js",
+    "bench": "npm run build && node benchmarks/run.cjs",
+    "test:python": "LYCA_REQUIRE_PYTHON=1 vitest run tests/python.test.ts",
+    "bench:python": "npm run build && node benchmarks/python.cjs"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
-  }
+  },
+  "author": "Viraj Shoor"
 }

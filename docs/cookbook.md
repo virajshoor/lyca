@@ -67,7 +67,7 @@ def main() -> i32:
     return s
 ```
 
-Expected exit code: `45`. The loop variable is a mutable `i32` local for the body. There is no `break` or `continue`.
+Expected exit code: `45`. The loop variable is an immutable `i32` local for the body. There is no `break` or `continue`.
 
 ## GCD
 

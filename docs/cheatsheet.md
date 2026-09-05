@@ -12,7 +12,7 @@ lyca build file.lyca -o out
 ./out                   # native binary; main() -> i32 is the exit code
 ```
 
-Spaces only. Comments: `# ...`. Extension: `.lyca`. No REPL, no modules, one file.
+Spaces only. Comments: `# ...`. Extension: `.lyca`. Native programs have no Lyca modules and use one file. Typed `extern python` declarations and `--target python` enable optional CPython integration.
 
 ## Skeleton
 
@@ -75,7 +75,7 @@ else:
 while i < 10:
     i = i + 1
 
-for i in 0..4:           # i32, half-open [0, 4)
+for i in 0..4:           # immutable i32, half-open [0, 4)
     s = s + i
 ```
 
@@ -125,7 +125,7 @@ Copy types (`i32`, floats, `bool`, `&T`) can be used freely. Move types (`string
 print("hi")              # def print(s: &string) -> i32
 ```
 
-Writes `s` plus a newline. Return value is `0`. That is the only builtin in v0.
+Writes `s` plus a newline. Return value is `0` on success. That is the only native builtin in v0. Runtime bounds/division failures exit 1; Python extensions raise exceptions.
 
 ## Common errors
 

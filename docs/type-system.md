@@ -74,7 +74,7 @@ You may also write `let r: &string = s`; the compiler inserts a borrow when the 
 
 Call sites do the same: a parameter of type `&T` will borrow an argument of type `T` instead of moving it. That is why `print(s)` does not consume `s`.
 
-Refs are Copy: `let r2: &string = r` copies the reference and both borrow the same owner.
+Refs are Copy: `let r2: &string = r` copies the reference and both borrow the same owner. Owners are tracked by binding identity, so shadowing does not redirect an existing loan.
 
 ### Rules
 
@@ -108,11 +108,19 @@ There is no `&mut T` in v0. Mutation goes through the owned `let mut` binding wh
 - Param `T` (Copy): the argument is copied.
 - Param `&T`: the argument is borrowed (explicit `&x` or implicit if it has type `T`).
 
-Returning a move type moves the local out of the function. Returning `&T` that borrows a local is not checked as a dangling-ref error in v0 if you somehow construct it — do not return a borrow of a local. The only safe `&T` values to return would have to borrow something that outlives the function; v0 has no such globals besides string literals. **Do not return `&T` from user functions in v0.** `print` takes `&string`; it does not return one.
+Returning a move type moves the local out of the function. Returning any `&T` is rejected (`LYC224`). Reference bindings must be immutable; nested references and references stored inside structs or arrays are rejected. Mutation through a shared reference and moving non-Copy values through one are also rejected. These restrictions keep v0's lifetime model small and explicit.
 
-## Why this model
+Branches start from the same incoming ownership state. A value is unavailable after a branch if any path that reaches the join moved it. Returning paths do not contaminate the state of continuing paths. Moves from outer bindings inside loops are rejected (`LYC230`); borrow instead or create the value inside the loop. This is conservative: even a move followed by reinitialization in every iteration is currently rejected.
 
-No garbage collector. String literals live in static storage; the type system still treats `string` as move-only so the same rules will apply when heap strings exist. Structs and arrays are stack-allocated and copied/moved as whole values. Predictable, C-like codegen: load and store, no runtime.
+## Storage and arithmetic
+
+Native string literals have static storage. Structs and arrays are stack values; shared references are pointers to those values. Moving an aggregate may still copy its representation; ownership is a compile-time rule, not a promise of zero-byte transfers. Fixed storage is allocated at function entry, so repeated loop iterations do not accumulate stack allocations.
+
+Python-boundary strings are copied into storage owned by the current outer call and released when that call ends. Long calls that repeatedly produce strings retain those buffers until completion. See [Python compatibility](python-compatibility.md) for this ceiling.
+
+Integer `+`, `-`, and `*` wrap at their declared width. Signed `/` and `%` truncate toward zero; a zero divisor or minimum signed integer divided/remaindered by `-1` raises a runtime error. Literal ranges are checked, including the negative `i32`/`i64` minima. Floating-point operations keep normal IEEE behavior; no fast-math flags are enabled. Floating `!=` is true for NaN.
+
+Known out-of-bounds literal indices are compile errors (`LYC231`). Dynamic indices are checked before both reads and writes. Native runtime errors print a message and exit with status 1; calls through Python extensions raise Python exceptions. Large stack values and deep recursion can still exhaust the process stack.
 
 ## Disallowed in v0 (and the error)
 

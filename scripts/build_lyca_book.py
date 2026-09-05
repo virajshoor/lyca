@@ -267,7 +267,7 @@ def build_story(st: dict[str, ParagraphStyle]) -> list:
     story.append(Paragraph(f"by {AUTHOR}", st["cover_author"]))
     story.append(Spacer(1, 0.15 * inch))
     story.append(Paragraph("Language designer and author of Lyca", st["cover_meta"]))
-    story.append(Paragraph("Python-like syntax. LLVM-native binaries. Types you can trust.", st["cover_meta"]))
+    story.append(Paragraph("Python-like syntax. Explicit types. Native LLVM output.", st["cover_meta"]))
     story.append(NextPageTemplate("body"))
     story.append(PageBreak())
 
@@ -603,7 +603,7 @@ while i < 10:
         P(
             "<font face='Courier'>for name in start..end:</font> iterates "
             "<font face='Courier'>i32</font> values in the half-open interval "
-            "<font face='Courier'>[start, end)</font>. The name is a mutable "
+            "<font face='Courier'>[start, end)</font>. The name is an immutable "
             "<font face='Courier'>i32</font> local for the loop body. There is no "
             "<font face='Courier'>break</font> or <font face='Courier'>continue</font> in v0."
         )
@@ -765,7 +765,7 @@ let t: string = s        # s is moved; using s is LYC218"""
         P(
             "Do not return <font face='Courier'>&amp;T</font> from user functions in v0. The only "
             "safe borrows to return would have to outlive the function; v0 has no such globals besides "
-            "string literals, and the checker is not a full lifetime analysis."
+            "string literals. The v0 checker uses conservative lexical lifetime rules; it is not a full Rust lifetime system."
         )
     )
     story.append(H2("print does not consume"))
@@ -788,8 +788,7 @@ let t: string = s        # s is moved; using s is LYC218"""
     story.append(
         P(
             "The only builtin is <font face='Courier'>def print(s: &amp;string) -&gt; i32</font>. It "
-            "writes <font face='Courier'>s</font> plus a newline via libc "
-            "<font face='Courier'>puts</font> and returns 0. You cannot "
+            "writes <font face='Courier'>s</font> plus a newline through the native runtime and returns 0 on success. You cannot "
             "<font face='Courier'>print(n)</font> for an integer. There is no "
             "<font face='Courier'>str(n)</font> and no string concatenation."
         )
@@ -950,7 +949,7 @@ def main() -> i32:
                 "No <font face='Courier'>break</font> or <font face='Courier'>continue</font>.",
                 "No mixing integer widths, no casts.",
                 "No methods, classes, inheritance, or first-class functions.",
-                "No modules, imports, or multi-file programs.",
+                "No Lyca modules, Lyca imports, or multi-file programs; typed Python declarations are optional.",
                 "No heap types, slices, generics, or <font face='Courier'>&amp;mut T</font>.",
                 "No REPL.",
             ],
@@ -959,7 +958,7 @@ def main() -> i32:
     )
     story.append(
         P(
-            "The ownership rules exist so heap types can be added later without a garbage collector. "
+            "The native ownership rules exist so heap types can be added later without a garbage collector. "
             "String literals live in static storage; the type system still treats "
             "<font face='Courier'>string</font> as move-only so the same rules will apply when heap "
             "strings exist. Structs and arrays are stack-allocated and copied or moved as whole values."
